@@ -25,7 +25,6 @@ Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag
   **Herdr HUD** from Start. The installer runs as your normal user. Keep all files
   together if running HerdrHUD.exe directly instead.
 - **Omarchy Quattro:** use the existing [Omarchy plugin](https://github.com/finna/omarchy-herdr-hud).
-  It installs directly without marketplace approval:
   `omarchy plugin add https://github.com/finna/omarchy-herdr-hud.git --enable`.
 
 These first alpha downloads are **not notarized or signed with a public publisher
