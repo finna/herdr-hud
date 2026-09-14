@@ -57,3 +57,9 @@ hot-plug/drag and alert interaction checks; login startup test; installer icon,
 public signing/notarization, and broader macOS/Intel coverage. The interface is
 prepared for reuse, but Windows and new Linux shells have not been implemented.
 The user has a Windows gaming PC for later testing and requested Mac-first work.
+
+## Composer shortcut update
+
+Enter sends; Control/Shift/Command/Option–Enter insert a newline at the cursor
+and preserve the per-agent draft. IME composition Enter is left to the input
+method, and held Enter does not submit repeatedly. The visible hint is updated.

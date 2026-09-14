@@ -29,7 +29,8 @@ packaging, signing/notarization, and broader hardware/game verification.
 - **Command–Option–H:** toggle the agent panel.
 - **Command–Option–Shift–H:** hide or restore the whole HUD.
 - **Escape:** close the panel while keeping H visible.
-- **Command–Enter or Control–Enter:** send a prompt to the selected ready agent.
+- **Enter:** send a prompt to the selected ready agent.
+- **Control–Enter or Shift–Enter:** insert a new line (Command/Option–Enter also insert a new line).
 - The **H menu-bar item** has visibility, alternative shortcuts, launch-at-login,
   refresh, and quit controls. Login startup is off by default and remains unverified.
 - Drag the roster divider to resize it. Visibility, position, view, and divider

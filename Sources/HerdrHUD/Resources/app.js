@@ -17,7 +17,7 @@ function renderRoster(){
   if(!items.length)roster.append(el('p',agents.length?'No matching agents.':'No agents found. Start an agent in Herdr.','empty'));roster.scrollTop=scroll;
 }
 function select(id){
-  drafts.set(selected,$('prompt').value);selected=id;selectionEpoch++;lastRendered='';$('prompt').value=drafts.get(id)||'';
+  drafts.set(selected,$('prompt').value);selected=id;request('preferences',{selectedAgent:id});selectionEpoch++;lastRendered='';$('prompt').value=drafts.get(id)||'';
   lastOutput=outputs.get(id)?.text||'';renderRoster();renderHeader();renderOutput();read();
 }
 function renderHeader(){
@@ -71,14 +71,23 @@ window.receive=({type,data})=>{
     const pending=promptByRequest.get(data.requestID);if(!pending)return;promptByRequest.delete(data.requestID);sending=false;
     if(data.error){notice(data.error);if(/uncertain/i.test(data.error))uncertain.add(pending.id);}
     else{if(selected===pending.id&&$('prompt').value===pending.message)$('prompt').value='';if(drafts.get(pending.id)===pending.message)drafts.delete(pending.id);notice('Prompt sent.');request('refresh');}renderHeader();
-  }else if(type==='preferences'){if(data.rosterWidth>=155)document.querySelector('aside').style.width=data.rosterWidth+'px';mode=data.mode||'chat';}
+  }else if(type==='preferences'){if(data.selectedAgent&&!selected)selected=data.selectedAgent;if(data.rosterWidth>=155)document.querySelector('aside').style.width=data.rosterWidth+'px';mode=data.mode||'chat';}
   else if(type==='notice'){notice(data.message);}
 };
 $('refresh').onclick=()=>request('refresh');$('close').onclick=()=>request('close');$('hide').onclick=()=>request('hide');$('send').onclick=send;
 $('reconcile').onclick=()=>{uncertain.delete(selected);notice('');renderHeader();};
 $('search').oninput=()=>{filter=$('search').value.toLowerCase();renderRoster();};
 $('prompt').oninput=()=>{drafts.set(selected,$('prompt').value);renderHeader();};
-$('prompt').onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send();}};
+$('prompt').onkeydown=e=>{
+  if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;
+  // Modifier-Enter always inserts a newline, including Control on macOS,
+  // whose native textarea behavior is not consistently a line break.
+  e.preventDefault();
+  if(e.shiftKey||e.ctrlKey||e.metaKey||e.altKey){
+    const input=$('prompt');input.setRangeText('\n',input.selectionStart,input.selectionEnd,'end');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  }else if(!e.repeat){send();}
+};
 for(const view of ['chat','terminal'])$(view).onclick=()=>{mode=view;request('preferences',{mode});lastRendered='';renderOutput();};
 const divider=$('divider');divider.onpointerdown=e=>{divider.setPointerCapture(e.pointerId);};divider.onpointermove=e=>{if(divider.hasPointerCapture(e.pointerId)){document.querySelector('aside').style.width=Math.min(Math.max(e.clientX,155),innerWidth*.42)+'px';}};
 divider.onpointerup=()=>request('preferences',{rosterWidth:document.querySelector('aside').offsetWidth});
