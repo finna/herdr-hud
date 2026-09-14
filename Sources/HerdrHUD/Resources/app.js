@@ -58,7 +58,6 @@ window.receive=({type,data})=>{
     const valid=new Set(agents.map(a=>a.id));unread=new Set([...unread].filter(id=>valid.has(id)));
     if(updates.length&&!opened){const a=updates[0];request('alertPreview',{id:a.id,title:name(a)+(a.agent_status==='blocked'?' needs input':' finished')});}
     $('machines').replaceChildren(...(data.machines||[]).map(m=>{const node=el('span',undefined,'machine');node.append(el('span',undefined,'dot '+(m.online?'online':'')),document.createTextNode(`${m.label} · ${m.online?`${m.count} agents`:'offline'}`));node.title=m.error||'';return node;}));
-    $('connection').textContent=`${agents.filter(a=>a.online).length} agents online · updates every 3s`;
     if(data.discoveryError)notice('Herdr setup: '+data.discoveryError);
     if(!selected&&agents.length)select(agents[0].id);renderRoster();renderHeader();badge();read();
   }else if(type==='visibility'){opened=data.open;if(opened){renderHeader();read();}}

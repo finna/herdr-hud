@@ -114,3 +114,10 @@ agents. Physical keyboard entry in games, alerts, multi-monitor hot-plug/drag,
 login startup, Windows local-Herdr mode, Windows 10/ARM64, public signing/installer
 polish and actual games are still release checks. Never claim universal fullscreen
 support from the fixture. Keep any user draft before relaunching the installed app.
+
+## Compact reading layout
+
+Removed the footer and its redundant status update, removed the header tagline,
+and reduced brand, header, machine-strip and conversation-header spacing. Shared
+UI is installed on both Mac and Windows. All 12 JavaScript tests and both live
+WebView read/draft/layout checks pass. No native transport changes were made.
