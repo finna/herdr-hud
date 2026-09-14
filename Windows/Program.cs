@@ -99,6 +99,23 @@ sealed class Bubble : Form
     public Action? Toggle, MoveEnded;
     public Action<int>? Hotkey;
     public int Count;
+    public Rectangle BadgeBounds
+    {
+        get { float scale = ClientSize.Width / 64f; return new Rectangle((int)Math.Round(41*scale), (int)Math.Round(3*scale), (int)Math.Round(20*scale), (int)Math.Round(20*scale)); }
+    }
+    public void SetBadgeCount(int value)
+    {
+        Count = Math.Max(0,value); UpdateShape(); Invalidate();
+    }
+    void UpdateShape()
+    {
+        if (ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
+        // Winding fill unions the overlapping circles instead of cutting a hole.
+        using var path = new GraphicsPath(FillMode.Winding);
+        path.AddEllipse(ClientRectangle);
+        if (Count > 0) path.AddEllipse(BadgeBounds);
+        var old = Region; Region = new Region(path); old?.Dispose();
+    }
     Point down, origin; bool dragging, pressed;
     protected override bool ShowWithoutActivation => true;
     protected override CreateParams CreateParams { get { var p = base.CreateParams; p.ExStyle |= 0x08000000 | 0x80; return p; } }
@@ -111,18 +128,21 @@ sealed class Bubble : Form
     }
     protected override void OnSizeChanged(EventArgs e)
     {
-        base.OnSizeChanged(e); using var path = new GraphicsPath(); path.AddEllipse(ClientRectangle); var old = Region; Region = new Region(path); old?.Dispose();
+        base.OnSizeChanged(e); UpdateShape();
     }
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e); var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(Color.FromArgb(233, 184, 92), 2); g.DrawEllipse(pen, 2, 2, Width-5, Height-5);
+        float scale = ClientSize.Width / 64f;
+        using var pen = new Pen(Color.FromArgb(233, 184, 92), 2*scale); g.DrawEllipse(pen, 2*scale, 2*scale, Width-5*scale, Height-5*scale);
         using var font = new Font("Segoe UI", Height * .40f, FontStyle.Bold, GraphicsUnit.Pixel);
         TextRenderer.DrawText(g, "H", font, ClientRectangle, Color.FromArgb(247, 201, 110), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         if (Count > 0)
         {
-            var rect = new Rectangle(Width-23, 4, 19, 19); g.FillEllipse(Brushes.LightGreen, rect);
-            TextRenderer.DrawText(g, Math.Min(Count, 9).ToString(), SystemFonts.SmallCaptionFont!, rect, Color.Black, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            var rect = BadgeBounds; g.FillEllipse(Brushes.LightGreen, rect);
+            using var border = new Pen(BackColor, 2*scale); g.DrawEllipse(border, rect);
+            using var badgeFont = new Font("Segoe UI", 10*scale, FontStyle.Bold, GraphicsUnit.Pixel);
+            TextRenderer.DrawText(g, Math.Min(Count, 9).ToString(), badgeFont, rect, Color.FromArgb(18,36,25), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
     }
     protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); if (e.Button != MouseButtons.Left) return; pressed = true; dragging = false; down = Cursor.Position; origin = Location; Capture = true; }
@@ -166,6 +186,7 @@ sealed class AgentPanel : Form
 
 sealed class SilentToast : Form
 {
+    public SilentToast() { StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None; }
     protected override bool ShowWithoutActivation => true;
     protected override CreateParams CreateParams { get { var p = base.CreateParams; p.ExStyle |= 0x08000000 | 0x80; return p; } }
 }
@@ -200,8 +221,9 @@ sealed class HUDContext : ApplicationContext
         using (var g = Graphics.FromImage(bitmap)) { g.Clear(Color.FromArgb(24,27,34)); using var font = new Font("Segoe UI", 23, FontStyle.Bold, GraphicsUnit.Pixel); g.DrawString("H", font, Brushes.Goldenrod, 2, 0); }
         var handle = bitmap.GetHicon(); using var original = Icon.FromHandle(handle); tray.Icon = (Icon)original.Clone(); Native.DestroyIcon(handle);
         tray.Text = "Herdr HUD"; tray.Visible = true; tray.DoubleClick += (_, _) => TogglePanel();
+        bubble.LocationChanged += (_, _) => PositionToast();
         BuildMenu(); RestorePosition(); RegisterHotkeys();
-        foregroundCallback = (_, _, _, _, _, _, _) => { if (!quitting && prefs.Visible) bubble.BeginInvoke(() => { Native.Raise(panel); Native.Raise(bubble); }); };
+        foregroundCallback = (_, _, _, _, _, _, _) => { if (!quitting && prefs.Visible) bubble.BeginInvoke(() => { Native.Raise(panel); if (toast is not null) Native.Raise(toast); Native.Raise(bubble); }); };
         foregroundHook = Native.SetWinEventHook(3,3,IntPtr.Zero,foregroundCallback,0,0,0);
         if (prefs.Visible) bubble.Show();
         timer.Tick += async (_, _) => await Refresh(); timer.Start();
@@ -254,7 +276,7 @@ sealed class HUDContext : ApplicationContext
                 if (data["selectedAgent"] is JsonValue && data.Text("selectedAgent").Length <= 8192) prefs.SelectedAgent = data.Text("selectedAgent");
                 if (data["rosterWidth"] is JsonValue value && value.TryGetValue<double>(out var width) && width is >=155 and <=600) prefs.RosterWidth = width;
                 if (data.Text("mode") is "chat" or "terminal") prefs.Mode = data.Text("mode"); prefs.Save(); break;
-            case "badge": bubble.Count = data["count"]?.GetValue<int>() ?? 0; bubble.Invalidate(); break;
+            case "badge": bubble.SetBadgeCount(data["count"]?.GetValue<int>() ?? 0); break;
             case "alertPreview":
                 if (panel.Visible || !prefs.Visible) break;
                 JsonObject output; try { output = await Serialized(() => client.Output(id)); } catch { output = new() { ["id"] = id, ["text"] = "", ["provider"] = "" }; }
@@ -338,18 +360,32 @@ sealed class HUDContext : ApplicationContext
         int x = bubble.Right+12; if (x+panel.Width > r.Right) x = bubble.Left-panel.Width-12;
         panel.Location = new Point(Math.Clamp(x, r.Left+8, Math.Max(r.Left+8, r.Right-panel.Width-8)), Math.Clamp(bubble.Top, r.Top+8, Math.Max(r.Top+8, r.Bottom-panel.Height-8)));
     }
-    void DisplaysChanged(object? sender, EventArgs e) { if (!quitting) bubble.BeginInvoke(() => { RestorePosition(); PositionPanel(); }); }
+    void DisplaysChanged(object? sender, EventArgs e) { if (!quitting) bubble.BeginInvoke(() => { RestorePosition(); PositionPanel(); PositionToast(); }); }
     void ShowToast(JsonObject data)
     {
-        HideToast(); toast = new SilentToast { Text = "Herdr HUD Agent Update", FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, TopMost = true, BackColor = Color.FromArgb(24,27,34), Size = new Size(330, 110) };
-        var text = new Label { Text = data.Text("title")+"\n\n"+data.Text("preview"), ForeColor = Color.WhiteSmoke, Padding = new Padding(14,12,34,12), Dock = DockStyle.Fill, Cursor = Cursors.Hand };
+        HideToast();
+        float scale = bubble.DeviceDpi / 96f;
+        int Px(int value) => (int)Math.Round(value*scale);
+        toast = new SilentToast { Text = "Herdr HUD Agent Update", FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, TopMost = true, BackColor = Color.FromArgb(24,27,34), Size = new Size(Px(330), Px(110)) };
+        var text = new Label { Text = data.Text("title")+"\n\n"+data.Text("preview"), ForeColor = Color.WhiteSmoke, Padding = new Padding(Px(14),Px(12),Px(38),Px(12)), Dock = DockStyle.Fill, Cursor = Cursors.Hand };
         text.Click += (_, _) => { OpenPanel(); Emit("select", new() { ["id"] = data.Text("id") }); };
-        var close = new Button { Text = "×", Width = 28, Height = 28, Left = 300, FlatStyle = FlatStyle.Flat, ForeColor = Color.WhiteSmoke }; close.Click += (_, _) => HideToast();
+        var close = new Button { Text = "×", Width = Px(28), Height = Px(28), Left = toast.ClientSize.Width-Px(30), Top = Px(2), Anchor = AnchorStyles.Top | AnchorStyles.Right, FlatStyle = FlatStyle.Flat, ForeColor = Color.WhiteSmoke }; close.Click += (_, _) => HideToast();
         toast.Controls.Add(text); toast.Controls.Add(close); close.BringToFront();
-        var r = Screen.FromControl(bubble).WorkingArea;
-        toast.Location = new Point(Math.Clamp(bubble.Right+10, r.Left, r.Right-toast.Width), Math.Clamp(bubble.Top, r.Top, r.Bottom-toast.Height));
-        toast.Show(); toastTimer = new() { Interval = 8000 };
+        toast.Shown += (_, _) => PositionToast();
+        toast.DpiChanged += (_, _) => PositionToast();
+        PositionToast(); toast.Show(); Native.Raise(toast); Native.Raise(bubble);
+        toastTimer = new() { Interval = 8000 };
         toastTimer.Tick += (_, _) => { if (toast is not null && !toast.Bounds.Contains(Cursor.Position)) HideToast(); }; toastTimer.Start();
+    }
+    void PositionToast()
+    {
+        if (toast is null || toast.IsDisposed) return;
+        var area = Screen.FromRectangle(bubble.Bounds).WorkingArea;
+        int gap = (int)Math.Round(10*bubble.DeviceDpi/96f);
+        int x = bubble.Left + (bubble.Width-toast.Width)/2;
+        int y = bubble.Top-toast.Height-gap;
+        if (y < area.Top) y = bubble.Bottom+gap;
+        toast.Location = new Point(Math.Clamp(x,area.Left,Math.Max(area.Left,area.Right-toast.Width)), Math.Clamp(y,area.Top,Math.Max(area.Top,area.Bottom-toast.Height)));
     }
     void HideToast() { toastTimer?.Dispose(); toastTimer = null; toast?.Dispose(); toast = null; }
     void Connection()
@@ -373,7 +409,7 @@ sealed class HUDContext : ApplicationContext
     }
     JsonObject Diagnostics()
     {
-        var data = new JsonObject { ["ready"] = ready, ["visible"] = bubble.Visible, ["panelOpen"] = panel.Visible, ["pid"] = Environment.ProcessId, ["sessionId"] = Process.GetCurrentProcess().SessionId, ["agents"] = snapshot["agents"]?.AsArray().Count ?? 0, ["resources"] = Path.Combine(AppContext.BaseDirectory, "Resources"), ["shortcutWarning"] = hotkeyWarning, ["bubbleBounds"] = JsonSerializer.SerializeToNode(bubble.Bounds), ["panelBounds"] = JsonSerializer.SerializeToNode(panel.Bounds) };
+        var data = new JsonObject { ["ready"] = ready, ["visible"] = bubble.Visible, ["panelOpen"] = panel.Visible, ["pid"] = Environment.ProcessId, ["sessionId"] = Process.GetCurrentProcess().SessionId, ["agents"] = snapshot["agents"]?.AsArray().Count ?? 0, ["resources"] = Path.Combine(AppContext.BaseDirectory, "Resources"), ["shortcutWarning"] = hotkeyWarning, ["badgeCount"] = bubble.Count, ["badgeBounds"] = JsonSerializer.SerializeToNode(bubble.BadgeBounds), ["toastBounds"] = toast is not null ? JsonSerializer.SerializeToNode(toast.Bounds) : null, ["bubbleBounds"] = JsonSerializer.SerializeToNode(bubble.Bounds), ["panelBounds"] = JsonSerializer.SerializeToNode(panel.Bounds) };
         File.WriteAllText(Path.Combine(Program.Support, "diagnostics.json"), data.ToJsonString()); return data;
     }
     async Task Listen()
@@ -415,6 +451,16 @@ sealed class HUDContext : ApplicationContext
                 // CDP awaits the promise; the bundled test never sends a prompt.
                 var checkedUI = await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate", "{\"expression\":\"window.verifyControls()\",\"awaitPromise\":true,\"returnByValue\":true}");
                 File.WriteAllText(Path.Combine(Program.Support, "ui-verification.json"), checkedUI); return JsonNode.Parse(checkedUI) as JsonObject ?? new();
+            case "preview-alert":
+                var foreground = Native.GetForegroundWindow();
+                ShowToast(new() { ["id"] = prefs.SelectedAgent, ["title"] = "Notification preview", ["preview"] = "This notification stays beside H, wherever you move it." });
+                await Task.Delay(250);
+                var preview = Diagnostics();
+                preview["focusUnchanged"] = Native.GetForegroundWindow() == foreground;
+                preview["onSameScreen"] = toast is not null && Screen.FromControl(toast).DeviceName == Screen.FromControl(bubble).DeviceName;
+                preview["onScreen"] = toast is not null && Screen.FromControl(bubble).WorkingArea.Contains(toast.Bounds);
+                File.WriteAllText(Path.Combine(Program.Support,"notification-preview.json"),preview.ToJsonString());
+                return preview;
             case "fixture": return await Fixture();
             default: return new() { ["error"] = "Unknown control command." };
         }

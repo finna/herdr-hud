@@ -66,6 +66,7 @@ machines. Root and saved-host authentication must already work without prompts.
 - H is draggable. Escape closes the panel; Enter sends; Ctrl/Shift+Enter adds a line.
 - Launch at login is optional and off by default. Quit from the tray menu.
 - The panel can be resized from its right and bottom edges.
+- Notifications appear above H (below it near the top edge) and follow it when moved.
 
 The Windows package is currently unsigned. It runs as your normal user and uses
 WinForms, WebView2 and native topmost windows. It does not inject into games or

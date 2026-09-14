@@ -121,3 +121,22 @@ Removed the footer and its redundant status update, removed the header tagline,
 and reduced brand, header, machine-strip and conversation-header spacing. Shared
 UI is installed on both Mac and Windows. All 12 JavaScript tests and both live
 WebView read/draft/layout checks pass. No native transport changes were made.
+
+## Windows badge and notification placement
+
+The bubble region now unions the circular button with its visible badge, using
+winding fill to avoid clipping or holes. Badge geometry and text scale with the
+button. Notifications use manual initial positioning and appear above the current
+H, below it near the top edge, clamped to that monitor's work area. Visible toasts
+follow H when dragged and are raised without activation on foreground changes.
+Notification size/padding now respect display DPI.
+
+Verified the installed bubble's native window region with a controlled badge at
+64, 96 and 128 pixel sizes; the full badge interior fits at all three scales and
+clearing it restores the circular button. The installed `--preview-alert` check
+showed the toast 15 physical pixels above H at 150 percent DPI on the same screen,
+fully on-screen, with foreground focus unchanged. An actual screenshot over WoW
+Classic confirmed the placement. Test tools and screenshots are private support
+files, not committed source. The user has also sent messages through the game HUD;
+WoW and the panel were observed focused separately while both remained visible.
+This does not establish exclusive-fullscreen or other-game compatibility.
