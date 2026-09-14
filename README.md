@@ -91,7 +91,7 @@ Those permissions may be needed by external tools to verify gameplay interaction
 
 ```sh
 swift test
-node --test tests/model.test.cjs
+node --test Tests/model.test.cjs
 node --check Sources/HerdrHUD/Resources/app.js
 ```
 
