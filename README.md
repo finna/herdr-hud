@@ -58,6 +58,12 @@ open "$HOME/Applications/Herdr HUD.app"
 The build is locally ad-hoc signed. Publisher signing/notarization and broader
 hardware/game verification remain future release work.
 
+To build a drag-to-Applications disk image locally, run
+`scripts/package-macos-dmg.sh`. It creates a DMG in `dist/` with the app and an
+Applications shortcut. This development package is also ad-hoc signed; changing
+the download format does not remove Gatekeeper warnings. Public Developer ID
+signing and Apple notarization are still required for the normal launch flow.
+
 - Click **H** to open or close the agents. Drag H to reposition it.
 - **Command–Option–H:** toggle the agent panel.
 - **Command–Option–Shift–H:** hide or restore the whole HUD.

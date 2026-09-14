@@ -181,3 +181,17 @@ retention, view switching, search, safe text rendering and layout on each platfo
 The source privacy pattern scan returned no findings. Package signing remains
 ad-hoc/unsigned; alpha release notes distinguish tested behavior from unverified
 exclusive-fullscreen, Intel Mac, Windows ARM64 and broader game compatibility.
+
+
+## macOS drag-to-Applications packaging
+
+A user reported Gatekeeper's cannot-check-for-malware warning with the public
+ZIP. The app remains ad-hoc signed and unnotarized. The build Mac still has zero
+valid code-signing identities. `scripts/package-macos-dmg.sh` creates a verified
+compressed disk image with the app, an Applications symlink, and installation
+instructions. It derives the filename architecture from the executable, stages
+in a temporary directory, and cleans that directory on exit. This only improves
+the copy-to-Applications step; it cannot remove the Gatekeeper warning. Do not
+present this DMG as a signed release. Developer ID signing, hardened runtime,
+notarization, stapling and a fresh downloaded-copy Gatekeeper check remain
+necessary before publishing a release that claims a normal verified launch.
