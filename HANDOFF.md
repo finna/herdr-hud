@@ -63,3 +63,54 @@ The user has a Windows gaming PC for later testing and requested Mac-first work.
 Enter sends; Control/Shift/Command/Option–Enter insert a newline at the cursor
 and preserve the per-agent draft. IME composition Enter is left to the input
 method, and held Enter does not submit repeatedly. The visible hint is updated.
+
+
+## Windows alpha — September 14, 2026
+
+The same repository now includes `Windows/` and `Windows.Tests/`. The canonical
+Git checkout remains on the Mac; Windows has a source copy under
+`~/Projects/herdr-hud-desktop`. Do not treat the Windows copy as a second repo.
+The source has no GitHub remote and has not been published.
+
+Windows uses .NET 10 WinForms and WebView2, sharing the exact Mac HTML/CSS/JS files.
+Its host provides a draggable H, resizable panel, tray menu, visibility toggles,
+Ctrl+Alt+H / Ctrl+Alt+Shift+H (alternative Ctrl+Win), optional startup, silent alerts,
+DPI-aware initial sizing, a narrow WebView bridge, and user-only named-pipe controls.
+Foreground changes reassert topmost positioning without activating the HUD.
+The app runs as the normal desktop user, not an elevated task or service.
+
+The user's PC has no local Herdr install. Its private connection preferences point
+to the existing Mac setup; saved remote profiles are executed from that source
+host so its aliases and credentials continue to work. The Windows key was created
+on Windows and its public key authorized on the Mac. No private key was copied.
+A Mac host key obtained through the existing trusted connection was pinned on
+Windows. Source credentials and addresses are absent from repository files.
+
+Installed Windows app: `%LOCALAPPDATA%/Programs/Herdr HUD/HerdrHUD.exe`.
+Start menu shortcut: Herdr HUD. Preferences, diagnostics, UI checks and screenshots
+are under `%LOCALAPPDATA%/Herdr HUD`. Screenshots contain private output and can
+include other desktop windows; never publish them. The development SDK was
+installed per-user under `%LOCALAPPDATA%/Herdr HUD BuildTools/dotnet`.
+The temporary interactive launch task is removed after launch; no background
+service or login startup was enabled.
+
+Verification: 12 Windows transport tests, 12 shared JavaScript tests, 13 Swift
+transport tests. Both native packages build; Mac ad-hoc signature verifies. The
+Windows build script restores its dependency lock and creates a self-contained
+x64 package. GitHub checks are authored but have not run on GitHub.
+
+Live Windows WebView checks read 13 source-host and 7 saved-remote agents, preserve
+drafts, switch Chat/Terminal, filter the roster, render terminal text safely, and
+fit the panel. Visibility controls pass. The 4K desktop uses 150 percent scaling;
+the initial panel is now 1410 by 975 physical pixels (940 by 650 design units).
+The fullscreen test fixture checks z-order, overlap, synthetic clicks confined to
+its own windows, panel focus, return to the fixture, and nonactivating overlays.
+It restores the prior app and cursor. This is a borderless test window; actual
+fullscreen games and exclusive fullscreen remain untested.
+
+Enter/newline and IME behavior is covered by shared handler tests with controlled
+bridges. Prompt transports are tested with fakes; no test prompts went into user
+agents. Physical keyboard entry in games, alerts, multi-monitor hot-plug/drag,
+login startup, Windows local-Herdr mode, Windows 10/ARM64, public signing/installer
+polish and actual games are still release checks. Never claim universal fullscreen
+support from the fixture. Keep any user draft before relaunching the installed app.

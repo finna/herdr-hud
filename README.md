@@ -3,9 +3,9 @@
 Keep your agents working while you game. A draggable H button opens your Herdr
 agents, recent output, and prompt composer above your desktop or fullscreen Space.
 
-**Mac preview, built directly on a Mac Studio.** This repository contains the
-native macOS app and reusable HTML/CSS/JavaScript interface. Windows and Linux
-shells are not implemented here yet. The existing Omarchy plugin remains at
+**macOS and Windows alpha.** One repository contains native hosts and a shared
+HTML/CSS/JavaScript interface. The Windows host is newly implemented; actual
+fullscreen-game compatibility remains under test. A new Linux host is not included. The existing Omarchy plugin remains at
 https://github.com/finna/omarchy-herdr-hud.
 
 ## Run on macOS
@@ -38,6 +38,48 @@ packaging, signing/notarization, and broader hardware/game verification.
 - Agents needing attention sort first, then working agents, then read idle agents.
 - Silent alerts appear beside H after an agent finishes or needs input. Hover to
   retain one, click to open its agent, or dismiss it. The attention badge remains.
+
+## Run on Windows
+
+Requires Windows 11 x64 for the currently tested build, Microsoft Edge WebView2
+Runtime, and either local Herdr or SSH access to an existing Mac/Linux Herdr setup.
+The build includes its .NET runtime. Node and a .NET SDK are not needed to run it.
+Windows 10 and ARM64 are untested.
+
+To build with the .NET 10 SDK installed:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-windows.ps1
+```
+
+Open **Herdr HUD** from Start. Right-click the tray H and choose **Herdr connection**.
+Leave the SSH target blank to use this PC's Herdr installation, or enter your
+existing Mac/Linux SSH target and session. In SSH-source mode, the HUD reads that
+host's saved Herdr machines and accesses them through the source host, using its
+existing SSH aliases and credentials. It does not copy private keys or enroll
+machines. Root and saved-host authentication must already work without prompts.
+
+- **Ctrl+Alt+H:** open/close the agent panel.
+- **Ctrl+Alt+Shift+H:** show/hide the entire HUD.
+- Alternative Ctrl+Win shortcuts and shortcuts-off are available in the tray menu.
+- H is draggable. Escape closes the panel; Enter sends; Ctrl/Shift+Enter adds a line.
+- Launch at login is optional and off by default. Quit from the tray menu.
+- The panel can be resized from its right and bottom edges.
+
+The Windows package is currently unsigned. It runs as your normal user and uses
+WinForms, WebView2 and native topmost windows. It does not inject into games or
+install a driver. **Exclusive fullscreen is not yet verified.** A visible overlay
+and focus return over a test window do not prove compatibility with your game.
+
+Settings and private diagnostic snapshots live in `%LOCALAPPDATA%\Herdr HUD`.
+The installed app lives in `%LOCALAPPDATA%\Programs\Herdr HUD`.
+The executable supports the same basic `--open`, `--close`, `--show`, `--hide`,
+`--toggle`, `--roster`, `--inspect`, `--snapshot`, and `--verify-ui` controls.
+Results are written under its private support directory. `--fixture` briefly
+creates a test window, clicks only that window and H, checks focus/order, captures
+that display, and then restores the prior window and pointer. It is a development
+test, not an exclusive-fullscreen game test. Do not run it during active gameplay.
 
 ## Herdr connection
 
@@ -75,6 +117,7 @@ Native approvals/questions must still be answered in Herdr.
 - `Sources/HerdrHUD/Herdr.swift`: native process transport, saved machine
   discovery, cached roster, fresh identity/readiness checks, literal SSH quoting.
 - `Sources/HerdrHUD/Resources/`: reusable UI and transcript/attention logic.
+- `Windows/`: native Windows shell, WebView2 bridge, and local/SSH-source transport.
 - No HTTP listener, browser credentials, third-party model connection, telemetry,
   Squad integration, or tablet interface is included.
 
@@ -92,7 +135,7 @@ Those permissions may be needed by external tools to verify gameplay interaction
 
 ```sh
 swift test
-node --test Tests/model.test.cjs
+node --test Tests/*.test.cjs
 node --check Sources/HerdrHUD/Resources/app.js
 ```
 
@@ -119,10 +162,10 @@ This verifies macOS fullscreen window behavior, not actual gameplay or mouse inp
 
 ## Release boundary
 
-Mac preview only. Verify real games, pointer/keyboard focus return, drag across
+Mac and Windows alpha. Verify real games, pointer/keyboard focus return, drag across
 monitors, alert interactions, physical shortcuts, login startup, and restart
 behavior before broad release. Intel Macs and older macOS releases are untested.
-Windows fullscreen and other Linux compositors require their own implementations
+Windows exclusive fullscreen and other Linux compositors require further work
 and game tests; ordinary always-on-top flags alone are not the release criterion.
 
 MIT licensed. Derived from Alex Finn's MIT-licensed Herdr HUD for Omarchy.

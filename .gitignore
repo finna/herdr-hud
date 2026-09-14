@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.xcuserstate
 .evidence/
+
+**/bin/
+**/obj/

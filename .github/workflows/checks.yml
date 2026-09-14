@@ -1,0 +1,33 @@
+name: Native builds and checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: swift test
+      - run: node --test Tests/*.test.cjs
+      - run: scripts/build-app.sh
+      - run: codesign --verify --deep --strict 'dist/Herdr HUD.app'
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: node --test Tests/model.test.cjs Tests/composer.test.cjs
+      - shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: herdr-hud-windows-x64-alpha
+          path: dist/win-x64/
