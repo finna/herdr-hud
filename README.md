@@ -7,6 +7,16 @@ agents, recent output, and prompt composer above your desktop or fullscreen Spac
 native hosts and a shared interface. Windows has been used over WoW Classic;
 other games and exclusive fullscreen remain unverified.
 
+## See it in game
+
+Read agent replies and send prompts with the panel open over World of Warcraft Classic.
+
+![Herdr HUD agent panel open over World of Warcraft Classic on Windows](assets/wow-panel.webp)
+
+Close the panel to keep just H and its attention badge on screen.
+
+![World of Warcraft Classic with the compact Herdr H button and attention badge](assets/wow-button.webp)
+
 ## Download and install
 
 Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag/v0.1.0-alpha.1):
