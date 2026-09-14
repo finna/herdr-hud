@@ -1,4 +1,7 @@
-param([string]$PackagePath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'dist/win-x64'))
+param([string]$PackagePath = '')
+if (-not $PackagePath) {
+    $PackagePath = if (Test-Path (Join-Path $PSScriptRoot 'HerdrHUD.exe')) { $PSScriptRoot } else { Join-Path (Split-Path $PSScriptRoot -Parent) 'dist/win-x64' }
+}
 $ErrorActionPreference = 'Stop'
 $destination = Join-Path $env:LOCALAPPDATA 'Programs/Herdr HUD'
 if (-not (Test-Path (Join-Path $PackagePath 'HerdrHUD.exe'))) { throw 'Build the Windows package first.' }

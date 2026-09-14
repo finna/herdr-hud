@@ -17,7 +17,7 @@ Do not prompt user agents during tests; use controlled test transports.
 Fullscreen collection flags are not proof of game compatibility. Preserve the
 distinction between window-order evidence, rendered UI, physical input, and
 actual game tests. Use the isolated fullscreen fixture before broader testing.
-Windows is implemented as an alpha; actual game tests remain outstanding.
+Windows is an alpha observed over WoW Classic. Other games and exclusive fullscreen remain unverified.
 Read CONTRIBUTING.md for platform checks and privacy boundaries.
 
 Rebuild and relaunch only this app when needed. Preserve any active draft before

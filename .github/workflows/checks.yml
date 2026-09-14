@@ -12,8 +12,13 @@ jobs:
           node-version: '24'
       - run: swift test
       - run: node --test Tests/*.test.cjs
-      - run: scripts/build-app.sh
+      - run: python3 Tests/test_prompt_helper.py
+      - run: scripts/package-macos.sh
       - run: codesign --verify --deep --strict 'dist/Herdr HUD.app'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: herdr-hud-macos-arm64-alpha
+          path: dist/Herdr-HUD-macOS-arm64.zip
   windows:
     runs-on: windows-latest
     steps:
@@ -26,8 +31,8 @@ jobs:
           node-version: '24'
       - run: node --test Tests/model.test.cjs Tests/composer.test.cjs
       - shell: pwsh
-        run: ./scripts/build-windows.ps1
+        run: ./scripts/package-windows.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: herdr-hud-windows-x64-alpha
-          path: dist/win-x64/
+          path: dist/Herdr-HUD-Windows-x64.zip

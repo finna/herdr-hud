@@ -22,10 +22,10 @@ static List<string> ShellWords(string text)
 var passed = 0;
 async Task Test(string name, Func<Task> run) { await run(); passed++; Console.WriteLine("PASS " + name); }
 
-await Test("idle prompts go once, with literal Unicode multiline argv", async () => {
+await Test("idle prompts go once, with literal Unicode multiline stdin", async () => {
     var fake = new Fake(); var client = fake.Client(); var id = await fake.ID(client);
     string prompt = "hello 'quoted' $(do-not-run) `literal`\n世界";
-    await client.Prompt(id, prompt); Check(fake.Sends == 1 && fake.Last!.Arguments[^1] == prompt, "Prompt changed or duplicated");
+    await client.Prompt(id, prompt); Check(fake.Sends == 1 && !string.Join(" ",fake.Last!.Arguments).Contains(prompt) && JsonNode.Parse(fake.Last.Input!)!["text"]!.GetValue<string>() == prompt, "Prompt changed or duplicated");
 });
 await Test("busy, blocked and unknown states refuse sends", async () => {
     foreach (string state in new[] { "working", "blocked", "unknown", "" }) { var fake = new Fake(); var client = fake.Client(); var id = await fake.ID(client); fake.Status = state; await Refused(() => client.Prompt(id, "hello"), "busy"); Check(fake.Sends == 0, "Sent to busy agent"); }
@@ -56,12 +56,13 @@ await Test("validation rejects empty, dash-leading, NUL and oversized messages b
 await Test("local, root and nested SSH preserve literal command arguments", () => {
     var client = new HerdrClient("user@source"); var machine = new Machine("remote", "Remote", "my-alias", "named session");
     string prompt = "hello ' $(touch /tmp/never) `literal`\nUnicode 世界";
-    var invocation = client.Invoke(machine, ["agent","prompt","p1",prompt],true);
+    var input=System.Text.Encoding.UTF8.GetBytes(new JsonObject{["text"]=prompt}.ToJsonString());
+    var invocation = client.Invoke(machine, ["status","server"],true,input);
     Check(invocation.Mutation && invocation.Arguments[^2]=="user@source", "Wrong root target");
     var outer = ShellWords(invocation.Arguments[^1]);
     Check(outer[0] == "ssh" && outer[^2] == "my-alias", "Wrong nested target");
     var inner = ShellWords(outer[^1]);
-    Check(inner[0] == "sh" && inner[1] == "-c" && inner[5] == "named session" && inner[^1] == prompt, "Nested argv changed");
+    Check(inner[0] == "python3" && inner[1] == "-c" && !string.Join(" ",invocation.Arguments).Contains(prompt) && invocation.Input==input, "Nested argv changed");
     Check(invocation.Arguments.Contains("StrictHostKeyChecking=yes"), "Untrusted host allowed");
     return Task.CompletedTask;
 });
@@ -76,7 +77,42 @@ await Test("source and named session are part of identity", () => {
     Check(new HerdrClient("first","one").Key(machine,row) != new HerdrClient("first","two").Key(machine,row),"Session collision"); return Task.CompletedTask;
 });
 await Test("process output drains stdout and stderr without deadlock", async () => {
-    var runner = new ProcessRunner(); string raw = await runner.Run(new Invocation("powershell.exe", ["-NoProfile", "-Command", "[Console]::Out.Write(('x'*150000)); [Console]::Error.Write(('y'*150000))"])); Check(raw.Length == 150000,"Output truncated");
+    var runner = new ProcessRunner(); string raw = await runner.Run(new Invocation("powershell.exe", ["-NoProfile", "-Command", "[Console]::Out.Write(('x'*150000)); [Console]::Error.Write(('y'*60000))"])); Check(raw.Length == 150000,"Output truncated");
+});
+await Test("stdout and stderr overflow are bounded", async () => {
+    foreach(string stream in new[]{"Out","Error"})await Refused(()=>new ProcessRunner(3).Run(new Invocation("powershell.exe",["-NoProfile","-Command",$"[Console]::{stream}.Write(('x'*1100000))"])),"limit");
+});
+await Test("stalled child group is terminated by the job", async () => {
+    string file=Path.GetTempFileName();
+    try {
+        string script="$p=Start-Process powershell.exe -ArgumentList '-NoProfile','-Command','Start-Sleep 20' -PassThru -NoNewWindow; [IO.File]::WriteAllText('"+file.Replace("'","''")+"',$p.Id); Start-Sleep 20";
+        await Refused(()=>new ProcessRunner(2).Run(new Invocation("powershell.exe",["-NoProfile","-Command",script])),"timed out");
+        int pid=int.Parse(File.ReadAllText(file));bool alive=false;try{using var child=System.Diagnostics.Process.GetProcessById(pid);alive=!child.HasExited;}catch(ArgumentException){}Check(!alive,"Child survived job cleanup");
+    } finally {File.Delete(file);}
+});
+await Test("stdin Unicode roundtrip without command arguments", async () => {
+    string text="private 🐑\n'quote' $(never)";
+    var raw=await new ProcessRunner().Run(new Invocation("powershell.exe",["-NoProfile","-Command","[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Console]::Out.Write([Console]::In.ReadToEnd())"],Input:System.Text.Encoding.UTF8.GetBytes(text)));
+    Check(raw==text,"stdin changed");
+});
+await Test("local named-pipe prompt roundtrip", async () => {
+    string name="herdr-hud-test-"+Guid.NewGuid();
+    using var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    async Task Serve(){
+        foreach(string method in new[]{"agent.get","agent.prompt"}){
+            using var server=new System.IO.Pipes.NamedPipeServerStream(name,System.IO.Pipes.PipeDirection.InOut,1,System.IO.Pipes.PipeTransmissionMode.Byte,System.IO.Pipes.PipeOptions.Asynchronous);
+            await server.WaitForConnectionAsync(cancel.Token);
+            using var reader=new StreamReader(server,System.Text.Encoding.UTF8,false,1024,true);
+            var request=JsonNode.Parse((await reader.ReadLineAsync(cancel.Token))!)!;Check(request["method"]!.GetValue<string>()==method,"Wrong socket method");
+            if(method=="agent.prompt")Check(request["params"]!["text"]!.GetValue<string>()=="private 🐑","Prompt altered");
+            var result=new JsonObject{["id"]=request["id"]!.DeepClone(),["result"]=new JsonObject{["type"]=method=="agent.get"?"agent_info":"agent_prompted",["agent"]=Fake.Agent("idle","t1","w1","c1")}};
+            await server.WriteAsync(System.Text.Encoding.UTF8.GetBytes(result.ToJsonString()+"\n"),cancel.Token);
+            // Wait until the client closes this connection before accepting the next.
+            Check(await server.ReadAsync(new byte[1],cancel.Token)==0,"Expected client EOF");
+        }
+    }
+    var serving=Serve();var data=System.Text.Encoding.UTF8.GetBytes(new JsonObject{["agent"]=Fake.Agent("idle","t1","w1","c1"),["text"]="private 🐑"}.ToJsonString());
+    string response=await LocalPrompt.Send(@"\\.\pipe\"+name,data,TimeSpan.FromSeconds(4));await serving;Check(response.Contains("agent_prompted"),"No acknowledgement");
 });
 Console.WriteLine($"{passed} tests passed.");
 
@@ -96,7 +132,7 @@ sealed class Fake
         var text=string.Join(" ",args);
         if (text.Contains("machine") && text.Contains("list")) return Task.FromResult(Remote ? new JsonArray(new JsonObject{["id"]="remote",["target"]=Target,["session"]="default",["enabled"]=true}).ToJsonString() : "[]");
         if (Offline) throw new InvalidOperationException("offline fixture");
-        if(invocation.Mutation){Sends++;return Task.FromResult(BadAck?"broken ack":"{\"result\":{\"ok\":true}}");}
+        if(invocation.Mutation){Sends++;return Task.FromResult(BadAck?"broken ack":"{\"result\":{\"type\":\"agent_prompted\",\"agent\":{\"terminal_id\":\"t1\"}}}");}
         if(text.Contains("workspace"))return Task.FromResult("{\"result\":{\"workspaces\":[]}}");
         if(text.Contains("tab"))return Task.FromResult("{\"result\":{\"tabs\":[]}}");
         if(text.Contains("read"))return Task.FromResult("• Fixture output");

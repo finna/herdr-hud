@@ -159,3 +159,25 @@ to user agents. The active composer was empty before the HUD-only relaunch.
 The macOS --preview-alert command writes private notification-preview.json and
 notification-preview.png under the app support directory. It uses a temporary
 preview without activating another app. --inspect now reports draftLength.
+
+## Public alpha preparation
+
+The transport now sends prompts through native local sockets/pipes or a static
+Python helper over SSH stdin, including nested SSH from a Windows source host.
+Remote Mac/Linux hosts require Python 3; no helper files are installed there.
+Native output capture is bounded before decoding. Mac uses posix_spawn process
+groups; Windows creates processes suspended and assigns a kill-on-close Job Object
+before resuming. Timeout/overflow tears down descendants. Local native socket,
+remote helper, stdin privacy, overflow and child-cleanup tests cover the change.
+
+Packaging scripts create Mac arm64 and Windows x64 ZIPs. The first public alpha is
+v0.1.0-alpha.1, unsigned/ad-hoc signed, with checksums and explicit installation
+instructions. No developer signing identity was available on the build Mac.
+
+Release verification: 19 Swift tests, 16 Windows tests, 12 shared JavaScript tests,
+and 5 remote-helper tests pass. Both packaged builds were installed locally after
+checking for active drafts. Live UI verification passed local/remote reads, draft
+retention, view switching, search, safe text rendering and layout on each platform.
+The source privacy pattern scan returned no findings. Package signing remains
+ad-hoc/unsigned; alpha release notes distinguish tested behavior from unverified
+exclusive-fullscreen, Intel Mac, Windows ARM64 and broader game compatibility.

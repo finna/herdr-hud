@@ -3,14 +3,42 @@
 Keep your agents working while you game. A draggable H button opens your Herdr
 agents, recent output, and prompt composer above your desktop or fullscreen Space.
 
-**macOS and Windows alpha.** One repository contains native hosts and a shared
-HTML/CSS/JavaScript interface. The Windows host is newly implemented; actual
-fullscreen-game compatibility remains under test. A new Linux host is not included. The existing Omarchy plugin remains at
-https://github.com/finna/omarchy-herdr-hud.
+**macOS and Windows alpha — open source under MIT.** One repository contains
+native hosts and a shared interface. Windows has been used over WoW Classic;
+other games and exclusive fullscreen remain unverified.
+
+## Download and install
+
+Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag/v0.1.0-alpha.1):
+
+- **Apple Silicon Mac:** [Herdr-HUD-macOS-arm64.zip](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-macOS-arm64.zip).
+  Extract the ZIP, move **Herdr HUD.app** into Applications (or your own
+  `~/Applications` folder), and open it. Intel Macs are not included in this build.
+- **Windows 11 x64:** [Herdr-HUD-Windows-x64.zip](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-Windows-x64.zip).
+  Extract the whole ZIP into a folder, double-click **Install.cmd**, then open
+  **Herdr HUD** from Start. The installer runs as your normal user. Keep all files
+  together if running HerdrHUD.exe directly instead.
+- **Omarchy Quattro:** use the existing [Omarchy plugin](https://github.com/finna/omarchy-herdr-hud).
+  It installs directly without marketplace approval:
+  `omarchy plugin add https://github.com/finna/omarchy-herdr-hud.git --enable`.
+
+These first alpha downloads are **not notarized or signed with a public publisher
+certificate** (the Mac app has a local ad-hoc signature). OS trust prompts are
+expected. Download from this repository and compare the release's SHA256SUMS.
+On a Mac, after attempting to open the app, trusted downloads can be allowed in
+System Settings → Privacy & Security → Open Anyway; see
+[Apple's instructions](https://support.apple.com/en-us/102445). This does not require
+disabling Gatekeeper. Windows may show an unknown-publisher/SmartScreen prompt;
+only proceed if you trust and have verified this download.
+
+Close the HUD and preserve drafts before installing an update. No agent servers
+need to be restarted. To uninstall, quit the HUD, turn off its optional login
+startup, and remove the app; on Windows also remove its Start menu shortcut.
+Settings locations are documented below.
 
 ## Run on macOS
 
-Requires macOS 13+, Herdr installed with an existing running default session,
+Requires macOS 13+, Herdr 0.9+ installed with an existing running default session,
 and existing SSH authentication for any saved remote machines. No account,
 model API key, Python runtime, Node runtime, or hosted service is required to
 run the packaged app. Xcode command-line tools are needed to build from source.
@@ -22,8 +50,8 @@ cp -R 'dist/Herdr HUD.app' ~/Applications/
 open "$HOME/Applications/Herdr HUD.app"
 ```
 
-The build is locally ad-hoc signed. Public distribution still needs release
-packaging, signing/notarization, and broader hardware/game verification.
+The build is locally ad-hoc signed. Publisher signing/notarization and broader
+hardware/game verification remain future release work.
 
 - Click **H** to open or close the agents. Drag H to reposition it.
 - **Command–Option–H:** toggle the agent panel.
@@ -36,13 +64,13 @@ packaging, signing/notarization, and broader hardware/game verification.
 - Drag the roster divider to resize it. Visibility, position, view, and divider
   width are remembered. Prompt drafts are kept per agent while the app runs.
 - Agents needing attention sort first, then working agents, then read idle agents.
-- Silent alerts appear beside H after an agent finishes or needs input. Hover to
+- Silent alerts appear above H (below it near the top edge) after an agent finishes or needs input. Hover to
   retain one, click to open its agent, or dismiss it. The attention badge remains.
 
 ## Run on Windows
 
 Requires Windows 11 x64 for the currently tested build, Microsoft Edge WebView2
-Runtime, and either local Herdr or SSH access to an existing Mac/Linux Herdr setup.
+Runtime, and either local Herdr 0.9+ or SSH access to an existing Mac/Linux Herdr setup.
 The build includes its .NET runtime. Node and a .NET SDK are not needed to run it.
 Windows 10 and ARM64 are untested.
 
@@ -93,7 +121,10 @@ is one level deep, matching the host's configured Herdr machines.
 Local Herdr is located in its standard user or Homebrew install, then on PATH.
 Remote reads and sends use installed SSH with existing configuration, batch
 mode, and strict host-key checking. Herdr must be available in its standard
-remote user install, Homebrew path, or login PATH. Complete authentication and
+remote user install, Homebrew path, or login PATH. Remote Mac/Linux hosts need Python 3 for a small, standard-library-only prompt
+helper. It runs over SSH without installing files and forwards text from stdin
+to the host’s Herdr socket. Local Mac/Windows prompts use native socket/pipe
+clients and do not require Python. Complete authentication and
 host-key setup in Herdr first; the HUD does not open hidden SSH questions.
 
 Agent identities include machine, target, session, pane, terminal, and available
@@ -111,11 +142,26 @@ Chat is a conservative formatting of recent captured Codex terminal output,
 not full structured conversation history. Other agents retain Terminal view.
 Native approvals/questions must still be answered in Herdr.
 
+## Prompt privacy and output limits
+
+Prompt text never appears in process arguments or SSH command strings. It travels
+over stdin across each SSH hop, then through Herdr's local socket API. The native
+hosts and remote helper recheck the expected agent and validate acknowledgements.
+Unknown delivery is never retried automatically.
+
+Native command output is streamed with a 1 MiB stdout and 64 KiB stderr limit,
+with 12-second Mac / 15-second Windows deadlines. Mac commands start in their own
+process group; Windows commands are created suspended, assigned to a kill-on-close
+Job Object, then resumed. Timeout or overflow terminates the owned group/job,
+including descendants. The remote helper caps socket replies at 1 MiB and status
+output at 64 KiB, and has a 12-second deadline. Prompts are limited to 60 KB.
+
 ## Architecture
 
 - `Sources/HerdrHUD/App.swift`: AppKit nonactivating panels, fullscreen Spaces,
   menu-bar controls, Carbon shortcuts, monitor positioning, and WebKit bridge.
-- `Sources/HerdrHUD/Herdr.swift`: native process transport, saved machine
+- `Sources/HerdrHUD/Transport.swift`: bounded process groups and native socket prompts.
+- `Sources/HerdrHUD/Herdr.swift`: saved machine
   discovery, cached roster, fresh identity/readiness checks, literal SSH quoting.
 - `Sources/HerdrHUD/Resources/`: reusable UI and transcript/attention logic.
 - `Windows/`: native Windows shell, WebView2 bridge, and local/SSH-source transport.
@@ -138,9 +184,11 @@ Those permissions may be needed by external tools to verify gameplay interaction
 swift test
 node --test Tests/*.test.cjs
 node --check Sources/HerdrHUD/Resources/app.js
+python3 Tests/test_prompt_helper.py
 ```
 
-Node is needed only for JavaScript development tests. Swift tests exercise
+Node is needed only for JavaScript development tests; Python 3 is used by socket
+fixtures and remote-helper tests during development. Swift tests exercise
 identity changes, readiness, argument quoting, ambiguous delivery, large output,
 saved-machine removal, offline caching, and reconnects with controlled transports.
 They do not prompt active user agents.

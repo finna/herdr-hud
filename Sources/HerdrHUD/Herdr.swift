@@ -20,40 +20,8 @@ struct Invocation {
     let executable: String
     let arguments: [String]
     let mutation: Bool
-}
-final class ProcessRunner {
-    func run(_ invocation: Invocation) throws -> String {
-        let process = Process(), out = Pipe(), err = Pipe()
-        process.executableURL = URL(fileURLWithPath: invocation.executable)
-        process.arguments = invocation.arguments
-        var env = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("HERDR_") }
-        env["PATH"] = NSHomeDirectory() + "/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        process.environment = env
-        process.standardOutput = out; process.standardError = err
-        process.standardInput = FileHandle.nullDevice
-        let completed = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in completed.signal() }
-        do { try process.run() } catch { throw HUDError("Could not launch Herdr or SSH: \(error.localizedDescription)") }
-        // Drain both pipes concurrently so a large transcript cannot deadlock.
-        let readGroup = DispatchGroup(), lock = NSLock()
-        var output = Data(), errors = Data()
-        readGroup.enter()
-        DispatchQueue.global().async { let d = out.fileHandleForReading.readDataToEndOfFile(); lock.lock(); output = d; lock.unlock(); readGroup.leave() }
-        readGroup.enter()
-        DispatchQueue.global().async { let d = err.fileHandleForReading.readDataToEndOfFile(); lock.lock(); errors = d; lock.unlock(); readGroup.leave() }
-        let timedOut = completed.wait(timeout: .now() + 12) == .timedOut
-        if timedOut {
-            process.terminate()
-            if completed.wait(timeout: .now() + 1) == .timedOut { kill(process.processIdentifier, SIGKILL); _ = completed.wait(timeout: .now() + 1) }
-        }
-        guard readGroup.wait(timeout: .now() + 2) == .success else { throw HUDError(invocation.mutation ? "Delivery uncertain. Inspect Herdr before sending again." : "Herdr output did not close.") }
-        if timedOut { throw HUDError(invocation.mutation ? "Delivery uncertain. Inspect Herdr before sending again." : "Machine timed out. Check its connection in Herdr.") }
-        if process.terminationStatus != 0 {
-            if invocation.mutation { throw HUDError("Delivery uncertain or refused. Inspect Herdr before sending again.") }
-            throw HUDError(String(decoding: errors, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).prefix(700).description)
-        }
-        return String(decoding: output, as: UTF8.self)
-    }
+    var input: Data? = nil
+    var localPrompt: Bool = false
 }
 final class HerdrClient {
     let execute: (Invocation) throws -> String
@@ -68,7 +36,7 @@ final class HerdrClient {
         let runner = ProcessRunner()
         self.execute = execute ?? { try runner.run($0) }
     }
-    func invocation(_ machine: Machine, _ args: [String], mutation: Bool = false) throws -> Invocation {
+    func invocation(_ machine: Machine, _ args: [String], mutation: Bool = false, input: Data? = nil) throws -> Invocation {
         let scoped = ["--session", machine.session] + args
         guard !scoped.contains(where: { $0.contains("\0") }) else { throw HUDError("Invalid command argument.") }
         if let target = machine.target {
@@ -76,10 +44,10 @@ final class HerdrClient {
             // The remote login shell may be fish. Run our fixed POSIX script explicitly.
             // Herdr's standard user install is checked first, then normal PATH lookup.
             let script = "unset HERDR_ENV HERDR_SOCKET_PATH HERDR_CONFIG_PATH HERDR_SESSION HERDR_SESSION_NAME HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID HERDR_TERMINAL_ID; if [ -x \"$HOME/.local/bin/herdr\" ]; then exec \"$HOME/.local/bin/herdr\" \"$@\"; elif [ -x /opt/homebrew/bin/herdr ]; then exec /opt/homebrew/bin/herdr \"$@\"; else exec herdr \"$@\"; fi"
-            let remote = (["sh", "-c", script, "herdr-hud"] + scoped).map(shellQuote).joined(separator: " ")
-            return Invocation(executable: "/usr/bin/ssh", arguments: ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=yes", target, remote], mutation: mutation)
+            let remote = mutation ? ["python3", "-c", try String(contentsOf:HUDResources.root.appendingPathComponent("prompt.py"),encoding:.utf8)].map(shellQuote).joined(separator:" ") : (["sh", "-c", script, "herdr-hud"] + scoped).map(shellQuote).joined(separator: " ")
+            return Invocation(executable: "/usr/bin/ssh", arguments: ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=yes", target, remote], mutation: mutation, input: input)
         }
-        return Invocation(executable: binary, arguments: (binary == "/usr/bin/env" ? ["herdr"] : []) + scoped, mutation: mutation)
+        return Invocation(executable: binary, arguments: (binary == "/usr/bin/env" ? ["herdr"] : []) + scoped, mutation: mutation, input:input, localPrompt:mutation)
     }
     func call(_ machine: Machine, _ args: [String], mutation: Bool = false) throws -> String {
         try execute(invocation(machine, args, mutation: mutation))
@@ -151,8 +119,11 @@ final class HerdrClient {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, message.utf8.count <= 60000, !message.contains("\0"), !message.hasPrefix("-") else { throw HUDError("Enter a prompt under 60 KB that does not start with a dash.") }
         let (machine, row) = try resolve(id)
         guard ["idle", "done"].contains(row["agent_status"] as? String ?? "") else { throw HUDError("This agent is busy or needs input. Answer native questions in Herdr.") }
-        let raw = try call(machine, ["agent", "prompt", row["pane_id"] as! String, message], mutation: true)
-        guard let data = raw.data(using: .utf8), let response = try? JSONSerialization.jsonObject(with:data) as? Row, response["result"] != nil, response["error"] == nil else { throw HUDError("Delivery uncertain. Inspect Herdr before sending again.") }
+        let input=Data((encode(["session":machine.session,"agent":row,"text":message])+"\n").utf8)
+        let raw: String
+        do { raw = try execute(invocation(machine, ["status","server"], mutation:true, input:input)) }
+        catch { throw HUDError("Delivery uncertain or refused. Inspect Herdr before sending again.") }
+        guard let data = raw.data(using: .utf8), let response = try? JSONSerialization.jsonObject(with:data) as? Row, (response["result"] as? Row)?["type"] as? String == "agent_prompted", ((response["result"] as? Row)?["agent"] as? Row)?["terminal_id"] as? String == row["terminal_id"] as? String, response["error"] == nil else { throw HUDError("Delivery uncertain. Inspect Herdr before sending again.") }
         return ["ok":true, "id":id]
     }
 }

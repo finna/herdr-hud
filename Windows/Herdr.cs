@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace HerdrHUD;
 
-public record Invocation(string Executable, string[] Arguments, bool Mutation = false);
+public record Invocation(string Executable, string[] Arguments, bool Mutation = false, byte[]? Input = null, bool LocalPrompt = false);
 public record Machine(string Id, string Label, string? Target, string Session);
 
 public static class Json
@@ -12,33 +12,6 @@ public static class Json
     public static string Text(this JsonObject row, string key) => row[key]?.GetValueKind() == System.Text.Json.JsonValueKind.String ? row[key]!.GetValue<string>() : "";
     public static bool Flag(this JsonObject row, string key) => row[key]?.GetValueKind() == System.Text.Json.JsonValueKind.True;
     public static JsonObject Copy(this JsonObject row) => (JsonObject)row.DeepClone();
-}
-
-public sealed class ProcessRunner
-{
-    public async Task<string> Run(Invocation invocation)
-    {
-        var start = new ProcessStartInfo(invocation.Executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-        foreach (var arg in invocation.Arguments) start.ArgumentList.Add(arg);
-        foreach (var key in start.Environment.Keys.Where(k => k.StartsWith("HERDR_", StringComparison.Ordinal)).ToArray()) start.Environment.Remove(key);
-        using var process = new Process { StartInfo = start };
-        try { process.Start(); } catch (Exception e) { throw new InvalidOperationException("Could not launch Herdr or SSH: " + e.Message); }
-        process.StandardInput.Close();
-        var output = process.StandardOutput.ReadToEndAsync();
-        var errors = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        try { await process.WaitForExitAsync(timeout.Token); }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-            throw new InvalidOperationException(invocation.Mutation ? "Delivery uncertain. Inspect Herdr before sending again." : "Machine timed out. Check its connection in Herdr.");
-        }
-        string stdout, stderr;
-        try { await Task.WhenAll(output, errors).WaitAsync(TimeSpan.FromSeconds(2)); stdout = await output; stderr = await errors; }
-        catch (TimeoutException) { throw new InvalidOperationException(invocation.Mutation ? "Delivery uncertain. Inspect Herdr before sending again." : "Herdr output did not close."); }
-        if (process.ExitCode != 0) throw new InvalidOperationException(invocation.Mutation ? "Delivery uncertain or refused. Inspect Herdr before sending again." : (string.IsNullOrWhiteSpace(stderr) ? "Herdr command failed." : stderr.Trim()[..Math.Min(stderr.Trim().Length, 700)]));
-        return stdout;
-    }
 }
 
 // Calls are serialized by the host. No terminal is prompted without fresh identity,
@@ -68,11 +41,11 @@ public sealed class HerdrClient
     }
     static string Command(IEnumerable<string> args) => string.Join(" ", args.Select(Quote));
     static string[] SshArgs(string target, string command) => ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=yes", target, command];
-    public Invocation Invoke(Machine machine, string[] args, bool mutation = false)
+    public Invocation Invoke(Machine machine, string[] args, bool mutation = false, byte[]? input = null)
     {
         string[] scoped = ["--session", machine.Session, ..args];
         if (scoped.Any(s => s.Contains('\0'))) throw new InvalidOperationException("Invalid command argument.");
-        var posix = Command(["sh", "-c", Script, "herdr-hud", ..scoped]);
+        var posix = mutation ? Command(["python3","-c",File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"Resources","prompt.py"))]) : Command(["sh", "-c", Script, "herdr-hud", ..scoped]);
         if (machine.Target is not null) ValidateTarget(machine.Target);
         var ssh = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "OpenSSH", "ssh.exe");
         if (sourceTarget.Length > 0)
@@ -80,9 +53,9 @@ public sealed class HerdrClient
             ValidateTarget(sourceTarget);
             // The source host resolves its own saved SSH aliases and credentials.
             var remote = machine.Target is null ? posix : Command(["ssh", ..SshArgs(machine.Target, posix)]);
-            return new Invocation(ssh, SshArgs(sourceTarget, remote), mutation);
+            return new Invocation(ssh, SshArgs(sourceTarget, remote), mutation,input);
         }
-        return machine.Target is null ? new Invocation(binary, scoped, mutation) : new Invocation(ssh, SshArgs(machine.Target, posix), mutation);
+        return machine.Target is null ? new Invocation(binary, scoped, mutation,input,mutation) : new Invocation(ssh, SshArgs(machine.Target, posix), mutation,input);
     }
     Task<string> Call(Machine machine, string[] args, bool mutation = false) => execute(Invoke(machine, args, mutation));
     async Task<List<JsonObject>> Rows(Machine machine, string kind)
@@ -158,9 +131,12 @@ public sealed class HerdrClient
         if (string.IsNullOrWhiteSpace(message) || Encoding.UTF8.GetByteCount(message) > 60000 || message.Contains('\0') || message.StartsWith('-')) throw new InvalidOperationException("Enter a prompt under 60 KB that does not start with a dash.");
         var (machine, agent) = await Resolve(id);
         if (agent.Text("agent_status") is not ("idle" or "done")) throw new InvalidOperationException("This agent is busy or needs input. Answer native questions in Herdr.");
-        string raw = await Call(machine, ["agent", "prompt", agent.Text("pane_id"), message], true);
+        var input=Encoding.UTF8.GetBytes(new JsonObject{["session"]=machine.Session,["agent"]=agent.DeepClone(),["text"]=message}.ToJsonString()+"\n");
+        string raw;
+        try { raw = await execute(Invoke(machine, ["status","server"],true,input)); }
+        catch { throw new InvalidOperationException("Delivery uncertain or refused. Inspect Herdr before sending again."); }
         JsonObject? response = null; try { response = JsonNode.Parse(raw) as JsonObject; } catch (System.Text.Json.JsonException) { }
-        if (response?["result"] is null || response["error"] is not null) throw new InvalidOperationException("Delivery uncertain. Inspect Herdr before sending again.");
+        if (response?["result"]?["type"]?.GetValue<string>() != "agent_prompted" || response?["result"]?["agent"]?["terminal_id"]?.GetValue<string>() != agent.Text("terminal_id") || response?["error"] is not null) throw new InvalidOperationException("Delivery uncertain. Inspect Herdr before sending again.");
         return new JsonObject { ["ok"] = true, ["id"] = id };
     }
 }
