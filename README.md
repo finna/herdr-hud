@@ -3,10 +3,6 @@
 Keep your agents working while you game. A draggable H button opens your Herdr
 agents, recent output, and prompt composer above your desktop or fullscreen Space.
 
-**macOS and Windows alpha — open source under MIT.** One repository contains
-native hosts and a shared interface. Windows has been used over WoW Classic;
-other games and exclusive fullscreen remain unverified.
-
 ## See it in game
 
 Read agent replies and send prompts with the panel open over World of Warcraft Classic.
