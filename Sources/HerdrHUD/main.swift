@@ -1,7 +1,7 @@
 import AppKit
 if CommandLine.arguments.contains("--roster") {
     print(encode(HerdrClient().snapshot()))
-} else if let command = CommandLine.arguments.dropFirst().first, ["--open","--close","--toggle","--hide","--show","--snapshot","--inspect","--verify-ui"].contains(command) {
+} else if let command = CommandLine.arguments.dropFirst().first, ["--open","--close","--toggle","--hide","--show","--snapshot","--inspect","--verify-ui","--preview-alert"].contains(command) {
     DistributedNotificationCenter.default().postNotificationName(HUDApp.channel,object:String(command.dropFirst(2)),userInfo:nil,deliverImmediately:true)
 } else {
     let identifier = Bundle.main.bundleIdentifier ?? "org.herdr.community.hud"

@@ -166,6 +166,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         bubble.setFrameOrigin(NSPoint(x:frame.minX+point.x,y:frame.minY+point.y)); positionPanel(); diagnostics()
     }
     func positionPanel() {
+        defer { positionToast() }
         guard bubble != nil, panel != nil, !NSScreen.screens.isEmpty else { return }
         let frame = screenForBubble().visibleFrame
         let size = NSSize(width:min(panel.frame.width,frame.width-24),height:min(panel.frame.height,frame.height-24))
@@ -175,7 +176,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         panel.setFrame(NSRect(x:min(max(x,frame.minX+12),frame.maxX-size.width-12),y:min(max(y,frame.minY+12),frame.maxY-size.height-12),width:size.width,height:size.height),display:true)
     }
     @objc func screensChanged() { restorePosition(); positionPanel() }
-    @objc func spaceChanged() { if visible { bubble.orderFrontRegardless(); if panelOpen { panel.orderFrontRegardless() } } }
+    @objc func spaceChanged() { if visible { bubble.orderFrontRegardless(); if panelOpen { panel.orderFrontRegardless() }; toast?.orderFrontRegardless() } }
     @objc func refresh() {
         guard visible, !polling else { return }; polling = true
         work.async { let data = self.client.snapshot(); DispatchQueue.main.async {
@@ -227,13 +228,16 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         hideToast()
         let window = NSPanel(contentRect:NSRect(x:0,y:0,width:320,height:92),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         configure(window); window.title = "Herdr HUD Alert"
+        window.level = NSWindow.Level(rawValue:bubble.level.rawValue+1)
         let view = ToastView(frame:NSRect(x:0,y:0,width:320,height:92)); view.app = self; view.agentID = data["id"] as? String ?? ""
         view.title = data["title"] as? String ?? "Agent update"; view.detail = data["preview"] as? String ?? "Click to read the response"
         window.contentView = view
-        let frame = screenForBubble().visibleFrame
-        window.setFrameOrigin(NSPoint(x:min(max(bubble.frame.maxX+10,frame.minX),frame.maxX-320),y:min(max(bubble.frame.minY,frame.minY),frame.maxY-92)))
-        toast = window; window.orderFrontRegardless()
+        toast = window; positionToast(); window.orderFrontRegardless()
         toastTimer = Timer.scheduledTimer(withTimeInterval:8,repeats:false) { [weak self] _ in if self?.toastHover != true { self?.hideToast() } }
+    }
+    func positionToast() {
+        guard let toast = toast, bubble != nil, !NSScreen.screens.isEmpty else { return }
+        toast.setFrame(notificationFrame(bubble:bubble.frame,size:toast.frame.size,visibleFrame:screenForBubble().visibleFrame),display:true)
     }
     func hideToast() { toastTimer?.invalidate(); toast?.orderOut(nil); toast = nil; toastHover = false }
     func diagnostics() {
@@ -248,6 +252,21 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         case "toggle": togglePanel()
         case "hide": if visible { toggleVisibility() }
         case "show": if !visible { toggleVisibility() }
+        case "preview-alert":
+            let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            showToast(["id":defaults.string(forKey:"selectedAgent") ?? "","title":"Notification preview","preview":"Notifications follow H and stay clear of the button."])
+            DispatchQueue.main.asyncAfter(deadline:.now()+0.25) {
+                guard let toast = self.toast else { return }
+                let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly,kCGNullWindowID) as? [Row] ?? []
+                let toastIndex = windows.firstIndex { ($0[kCGWindowNumber as String] as? Int) == toast.windowNumber }
+                let bubbleIndex = windows.firstIndex { ($0[kCGWindowNumber as String] as? Int) == self.bubble.windowNumber }
+                let evidence: Row = ["bubbleFrame":NSStringFromRect(self.bubble.frame),"toastFrame":NSStringFromRect(toast.frame),"onScreen":self.screenForBubble().visibleFrame.contains(toast.frame),"overlapsButton":toast.frame.intersects(self.bubble.frame),"focusUnchanged":NSWorkspace.shared.frontmostApplication?.processIdentifier == foreground,"toastAboveButton":toastIndex != nil && bubbleIndex != nil && toastIndex! < bubbleIndex!,"visible":toast.isVisible]
+                try? encode(evidence).write(to:self.support.appendingPathComponent("notification-preview.json"),atomically:true,encoding:.utf8)
+                if let view = toast.contentView, let rep = view.bitmapImageRepForCachingDisplay(in:view.bounds) {
+                    view.cacheDisplay(in:view.bounds,to:rep)
+                    if let data = rep.representation(using:.png,properties:[:]) { try? data.write(to:self.support.appendingPathComponent("notification-preview.png")) }
+                }
+            }
         case "verify-ui":
             openPanel()
             web.callAsyncJavaScript("return await window.verifyControls()",arguments:[:],in:nil,in:.page) { result in
@@ -256,7 +275,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
                 try? encode(value).write(to:self.support.appendingPathComponent("ui-verification.json"),atomically:true,encoding:.utf8)
             }
         case "inspect":
-            web.evaluateJavaScript("JSON.stringify({title:document.title,agents:document.querySelectorAll('.agent').length,selected:document.getElementById('title').textContent,outputLength:document.getElementById('output').textContent.length,sendDisabled:document.getElementById('send').disabled,notice:document.getElementById('notice').textContent})") { value,error in
+            web.evaluateJavaScript("JSON.stringify({title:document.title,agents:document.querySelectorAll('.agent').length,selected:document.getElementById('title').textContent,outputLength:document.getElementById('output').textContent.length,draftLength:document.getElementById('prompt').value.length,sendDisabled:document.getElementById('send').disabled,notice:document.getElementById('notice').textContent})") { value,error in
                 let text = (value as? String) ?? (error?.localizedDescription ?? "unknown")
                 try? text.write(to:self.support.appendingPathComponent("ui-check.json"),atomically:true,encoding:.utf8)
             }

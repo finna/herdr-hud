@@ -140,3 +140,22 @@ Classic confirmed the placement. Test tools and screenshots are private support
 files, not committed source. The user has also sent messages through the game HUD;
 WoW and the panel were observed focused separately while both remained visible.
 This does not establish exclusive-fullscreen or other-game compatibility.
+
+## macOS notification placement
+
+Notifications now anchor above H, falling below it near the top edge and trying
+either side if needed. Placement is clamped to the button's screen without
+overlapping H wherever space permits. Visible alerts follow button movement and
+display changes. Their native window level is above H and they are raised when
+switching Spaces.
+
+All 15 Swift tests pass, including placement at corners, edges and the middle of
+two displays with different origins. The rebuilt installed app's ad-hoc signature
+verifies. Its own notification preview reported a 10-point gap above H, fully
+on-screen, no overlap, higher window order than H, and unchanged foreground focus.
+The private ToastView snapshot also rendered correctly. No test prompts were sent
+to user agents. The active composer was empty before the HUD-only relaunch.
+
+The macOS --preview-alert command writes private notification-preview.json and
+notification-preview.png under the app support directory. It uses a temporary
+preview without activating another app. --inspect now reports draftLength.
