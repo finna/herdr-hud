@@ -3,6 +3,21 @@
 Keep your agents working while you game. A draggable H button opens your Herdr
 agents, recent output, and prompt composer above your desktop or fullscreen Space.
 
+## Why Herdr?
+
+[Herdr](https://herdr.dev/) keeps your coding agents in persistent terminal
+sessions and brings their status together across computers. Herdr HUD puts that
+setup behind a floating H, so you can read progress and send follow-ups while
+you game. Run agents on your gaming machine or connect to a Mac/Linux computer
+that hosts them.
+
+Bring your own coding agent and its existing login. The HUD has no separate
+account or model subscription; your agent's normal provider costs still apply.
+
+**New to Herdr? [Start with the step-by-step setup guide](docs/getting-started.md).**
+It covers installing Herdr, starting your first agent, connecting the HUD,
+setting up SSH or Tailscale, adding computers, and troubleshooting.
+
 ## See it in game
 
 Read agent replies and send prompts with the panel open over World of Warcraft Classic.
@@ -14,6 +29,9 @@ Close the panel to keep just H and its attention badge on screen.
 ![World of Warcraft Classic with the compact Herdr H button and attention badge](assets/wow-button.webp)
 
 ## Download and install
+
+For a first-time setup, follow the [beginner guide](docs/getting-started.md).
+Already have agents running in Herdr? Install the HUD below.
 
 Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag/v0.1.0-alpha.1):
 
@@ -49,23 +67,6 @@ and existing SSH authentication for any saved remote machines. No account,
 model API key, Python runtime, Node runtime, or hosted service is required to
 run the packaged app. Xcode command-line tools are needed to build from source.
 
-```sh
-scripts/build-app.sh
-mkdir -p ~/Applications
-cp -R 'dist/Herdr HUD.app' ~/Applications/
-open "$HOME/Applications/Herdr HUD.app"
-```
-
-Local builds default to ad-hoc signing. Published Mac downloads use Developer ID
-signing and Apple notarization. Broader hardware/game verification remains future
-release work.
-
-To build a drag-to-Applications disk image locally, run
-`scripts/package-macos-dmg.sh`. It creates a DMG in `dist/` with the app and an
-Applications shortcut. By default this development package is also ad-hoc signed;
-changing the download format does not remove Gatekeeper warnings. Maintainers can
-prepare a signed and notarized DMG using the [macOS release guide](docs/macos-release.md).
-
 - Click **H** to open or close the agents. Drag H to reposition it.
 - **Command–Option–H:** toggle the agent panel.
 - **Command–Option–Shift–H:** hide or restore the whole HUD.
@@ -86,13 +87,6 @@ Requires Windows 11 x64 for the currently tested build, Microsoft Edge WebView2
 Runtime, and either local Herdr 0.9+ or SSH access to an existing Mac/Linux Herdr setup.
 The build includes its .NET runtime. Node and a .NET SDK are not needed to run it.
 Windows 10 and ARM64 are untested.
-
-To build with the .NET 10 SDK installed:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-windows.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-windows.ps1
-```
 
 Open **Herdr HUD** from Start. Right-click the tray H and choose **Herdr connection**.
 Leave the SSH target blank to use this PC's Herdr installation, or enter your
@@ -124,6 +118,9 @@ that display, and then restores the prior window and pointer. It is a developmen
 test, not an exclusive-fullscreen game test. Do not run it during active gameplay.
 
 ## Herdr connection
+
+For commands and examples, see [connecting the HUD](docs/getting-started.md#install-and-connect-the-hud)
+and [adding more computers](docs/getting-started.md#add-more-computers).
 
 The app reads `herdr machine list --json` from your existing installation. It
 lists the local default session and enabled saved SSH machines, respecting each
@@ -190,6 +187,41 @@ explicitly requested panel snapshots live in `~/Library/Application Support/Herd
 Snapshots contain private agent output; do not include them in public releases.
 The app itself requires neither Accessibility nor Screen Recording permission.
 Those permissions may be needed by external tools to verify gameplay interactions.
+
+## Build from source
+
+These steps are for developers. Downloaded apps do not require the build tools.
+Run commands from a clone of this repository.
+
+### macOS build
+
+Install Xcode command-line tools, then:
+
+```sh
+scripts/build-app.sh
+mkdir -p ~/Applications
+cp -R 'dist/Herdr HUD.app' ~/Applications/
+open "$HOME/Applications/Herdr HUD.app"
+```
+
+Local builds default to ad-hoc signing. Published Mac downloads use Developer ID
+signing and Apple notarization. Broader hardware/game verification remains future
+release work.
+
+To build a drag-to-Applications disk image locally, run
+`scripts/package-macos-dmg.sh`. It creates a DMG in `dist/` with the app and an
+Applications shortcut. By default this development package is also ad-hoc signed;
+changing the download format does not remove Gatekeeper warnings. Maintainers can
+prepare a signed and notarized DMG using the [macOS release guide](docs/macos-release.md).
+
+### Windows build
+
+To build with the .NET 10 SDK installed:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-windows.ps1
+```
 
 ## Checks
 

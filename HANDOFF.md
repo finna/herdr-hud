@@ -257,3 +257,22 @@ added for assessment; tickets validate. This is a quarantined-file assessment pl
 a separately verified live signed-app run, not a fresh-user browser-click test.
 The normal confirmation for an internet download may still appear. Users with
 older unsigned files need to download again and replace the old app.
+
+## Beginner setup documentation
+
+README now introduces why Herdr is useful and links docs/getting-started.md. The
+guide covers agent installation prerequisites, official stable Herdr installers,
+starting an agent inside a default session, Mac/Windows HUD installation, local
+versus SSH-source mode, Tailscale reachability, public-key setup, a batch SSH
+check, saved remote profiles, named sessions, controls, and troubleshooting.
+Multi-machine instructions use a Mac/Linux source and distinguish the Windows
+HUD's SSH-source mode from Herdr's unsupported Windows saved-machine workflow.
+Native Windows servers are not presented as remote SSH targets.
+
+Build commands moved into a developer section without changing them. Commands
+were checked against Herdr 0.9.0 CLI help, official docs, and current HUD source.
+Both documents passed relative-link/anchor and code-fence checks; all 17 external
+links in the beginner guide returned HTTP 200, including both download assets.
+This is a documentation-only change; no applications or agent servers were
+restarted, no setup commands mutated live Herdr state, and release binaries were
+not rebuilt. A fresh-user installation walkthrough was not performed.
