@@ -55,14 +55,14 @@ cp -R 'dist/Herdr HUD.app' ~/Applications/
 open "$HOME/Applications/Herdr HUD.app"
 ```
 
-The build is locally ad-hoc signed. Publisher signing/notarization and broader
-hardware/game verification remain future release work.
+Local builds default to ad-hoc signing. The currently published alpha is not
+notarized; broader hardware/game verification also remains future release work.
 
 To build a drag-to-Applications disk image locally, run
 `scripts/package-macos-dmg.sh`. It creates a DMG in `dist/` with the app and an
-Applications shortcut. This development package is also ad-hoc signed; changing
-the download format does not remove Gatekeeper warnings. Public Developer ID
-signing and Apple notarization are still required for the normal launch flow.
+Applications shortcut. By default this development package is also ad-hoc signed;
+changing the download format does not remove Gatekeeper warnings. Maintainers can
+prepare a signed and notarized DMG using the [macOS release guide](docs/macos-release.md).
 
 - Click **H** to open or close the agents. Drag H to reposition it.
 - **Command–Option–H:** toggle the agent panel.

@@ -195,3 +195,20 @@ the copy-to-Applications step; it cannot remove the Gatekeeper warning. Do not
 present this DMG as a signed release. Developer ID signing, hardened runtime,
 notarization, stapling and a fresh downloaded-copy Gatekeeper check remain
 necessary before publishing a release that claims a normal verified launch.
+
+## Prepared Developer ID release workflow
+
+The user renewed their Apple Developer membership. Xcode account setup and a
+usable local Developer ID Application identity are still required. Build scripts
+now accept HERDR_SIGNING_IDENTITY, use hardened runtime and timestamping for a
+Developer ID build, and retain ad-hoc signing by default. The DMG --notarize mode
+uses HERDR_NOTARY_PROFILE to submit and staple the app and then the image, checks
+Accepted and Gatekeeper assessment, and creates a final checksum. Credentials
+stay in Keychain. See docs/macos-release.md for setup and interrupted submission
+recovery. Actual signing/notarization remains unverified until credentials are
+configured; no notarized release has been published by this preparation.
+
+Preparation checks: all 19 Swift tests pass, development DMG builds and mounts,
+bundled UI and app signature verify, and missing credentials/ad-hoc notarization
+are rejected before submission. No signed build or notarization service request
+was made, and the running HUD was not replaced or restarted.
