@@ -212,3 +212,18 @@ Preparation checks: all 19 Swift tests pass, development DMG builds and mounts,
 bundled UI and app signature verify, and missing credentials/ad-hoc notarization
 are rejected before submission. No signed build or notarization service request
 was made, and the running HUD was not replaced or restarted.
+
+## Ad-hoc DMG publication
+
+The user explicitly chose to ship the drag-to-Applications DMG while Apple
+account/certificate setup remains unresolved. The DMG is an additional asset for
+v0.1.0-alpha.1; existing ZIP downloads remain available. README and release notes
+make the DMG the primary Mac download and put Apple's Open Anyway steps beside
+the installation instructions. Do not claim notarization or warning-free launch.
+The DMG contains the app, Applications shortcut, installation instructions and
+license. No live HUD replacement or agent restarts are needed for this release.
+
+The mounted DMG and copied-out app passed signature and bundled-resource checks.
+The app executable SHA256 exactly matches the original published Mac ZIP, so
+this is a packaging-only addition. The existing Mac and Windows ZIP checksums
+are preserved; SHA256SUMS gains the DMG entry.

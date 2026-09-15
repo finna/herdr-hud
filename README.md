@@ -17,9 +17,13 @@ Close the panel to keep just H and its attention badge on screen.
 
 Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag/v0.1.0-alpha.1):
 
-- **Apple Silicon Mac:** [Herdr-HUD-macOS-arm64.zip](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-macOS-arm64.zip).
-  Extract the ZIP, move **Herdr HUD.app** into Applications (or your own
-  `~/Applications` folder), and open it. Intel Macs are not included in this build.
+- **Apple Silicon Mac:** [Download Herdr HUD.dmg](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-macOS-arm64.dmg).
+  Open the DMG, drag **Herdr HUD.app** onto the **Applications** folder inside,
+  then eject the DMG and open Herdr HUD from Applications. Requires macOS 13+;
+  Intel Macs are not included in this build.
+  **First launch:** if macOS says it cannot check for malicious software, dismiss
+  the warning and go to **System Settings → Privacy & Security → Open Anyway**
+  for Herdr HUD. Confirm **Open**. The current download is not notarized by Apple.
 - **Windows 11 x64:** [Herdr-HUD-Windows-x64.zip](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-Windows-x64.zip).
   Extract the whole ZIP into a folder, double-click **Install.cmd**, then open
   **Herdr HUD** from Start. The installer runs as your normal user. Keep all files
