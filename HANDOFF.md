@@ -227,3 +227,33 @@ The mounted DMG and copied-out app passed signature and bundled-resource checks.
 The app executable SHA256 exactly matches the original published Mac ZIP, so
 this is a packaging-only addition. The existing Mac and Windows ZIP checksums
 are preserved; SHA256SUMS gains the DMG entry.
+
+## Signed and notarized Mac downloads — September 15, 2026 UTC
+
+Developer ID Application signing is configured on the release Mac. A missing
+Apple Developer ID G2 intermediate caused zero valid identities after the initial
+key/certificate import; installing the official intermediate restored validation
+without changing trust overrides. Keychain access from SSH can be unavailable
+even when local Terminal can use the saved credentials. Run release signing and
+notarytool in that local session when needed; the user approves Keychain prompts
+and enters passwords directly. No credentials are committed or packaged.
+
+Both app and DMG submissions returned Accepted. Both tickets were stapled and
+validated, and both Gatekeeper assessments report Notarized Developer ID. The
+DMG's copied-out app and the ZIP's extracted app also pass signature, ticket and
+Gatekeeper checks. Mac DMG and ZIP assets at the existing v0.1.0-alpha.1 URLs were
+updated together with SHA256SUMS and release notes. Windows ZIP bytes are unchanged.
+
+The signed app with hardened runtime was installed after a fresh empty-draft
+check, preserving the prior app in private backup storage. It found 20 agents.
+Live UI verification passed chat, terminal, local/remote output, draft retention,
+search, safe text and layout; the panel was restored closed with H visible. Wait
+for the WebView and roster to load before invoking --verify-ui on a new process.
+No test prompts were sent to active agents and no Herdr services were restarted.
+
+Fresh anonymous public Mac downloads matched published checksums. Gatekeeper
+accepted the public DMG and its copied-out app after quarantine attributes were
+added for assessment; tickets validate. This is a quarantined-file assessment plus
+a separately verified live signed-app run, not a fresh-user browser-click test.
+The normal confirmation for an internet download may still appear. Users with
+older unsigned files need to download again and replace the old app.

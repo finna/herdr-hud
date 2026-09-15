@@ -1,7 +1,8 @@
 # macOS signing and notarization
 
-The public alpha ZIP remains ad-hoc signed. These scripts prepare a future signed
-release; their existence does not establish that any published asset is notarized.
+The Mac DMG and ZIP in v0.1.0-alpha.1 have been updated with a Developer ID signed,
+notarized app. The DMG itself is also signed and notarized. Default local builds
+remain ad-hoc signed; every future release must pass the checks below.
 
 ## One-time setup on the release Mac
 
@@ -10,7 +11,11 @@ release; their existence does not establish that any published asset is notarize
 2. Select the paid team, open Manage Certificates, and create a Developer ID
    Application certificate. Keep its private key in this Mac's Keychain.
 3. Confirm the certificate is usable with
-   `security find-identity -v -p codesigning`.
+   `security find-identity -v -p codesigning`. A successful import is insufficient:
+   the expected identity must appear in the valid identities list. If Apple's G2
+   intermediate is missing, install Developer ID - G2 from
+   [Apple PKI](https://www.apple.com/certificateauthority/) into the login Keychain;
+   do not override certificate trust settings.
 4. In a local Terminal, run `xcrun notarytool store-credentials herdr-hud-release`.
    Follow its interactive prompts for the Apple Account, Team ID and an
    app-specific password. Create that password through your Apple Account.
@@ -37,7 +42,17 @@ and asks Gatekeeper to assess it. It copies that app into a drag-to-Applications
 DMG, signs and notarizes the DMG, staples its ticket, assesses it and writes a
 SHA256 checksum. Neither credentials nor private diagnostics are packaged.
 The release path refuses missing credentials or ad-hoc signing instead of silently
-falling back. Ordinary `scripts/build-app.sh` remains an ad-hoc development build.
+falling back. If the SSH session cannot access the login Keychain, run the release
+command in a local Terminal on the Mac. Unlock Keychain and approve codesign's
+access through macOS's prompts; do not put the Mac password in scripts or change
+access for unrelated keys. Ordinary `scripts/build-app.sh` remains an ad-hoc development build.
+
+For a ZIP download, archive the already-stapled app using `ditto -c -k
+--sequesterRsrc --keepParent`, with README and LICENSE in a clean staging folder
+if desired. Do not rebuild or re-sign between notarization and ZIP creation.
+Extract the ZIP with `ditto -x -k` and check its app ticket and Gatekeeper result.
+`scripts/package-macos.sh` rebuilds the app and is for development packaging;
+it does not preserve the previously notarized app.
 
 Submission records are retained under ignored `dist/notary.*/submission.plist`.
 If a wait times out or a response is uncertain, inspect the recorded submission

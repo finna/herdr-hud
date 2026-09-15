@@ -21,9 +21,9 @@ Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag
   Open the DMG, drag **Herdr HUD.app** onto the **Applications** folder inside,
   then eject the DMG and open Herdr HUD from Applications. Requires macOS 13+;
   Intel Macs are not included in this build.
-  **First launch:** if macOS says it cannot check for malicious software, dismiss
-  the warning and go to **System Settings → Privacy & Security → Open Anyway**
-  for Herdr HUD. Confirm **Open**. The current download is not notarized by Apple.
+  The Mac downloads are **Developer ID signed and notarized by Apple**.
+  macOS may ask you to confirm opening an app downloaded from the internet.
+  If you downloaded an earlier unsigned copy, download again and replace it.
 - **Windows 11 x64:** [Herdr-HUD-Windows-x64.zip](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-Windows-x64.zip).
   Extract the whole ZIP into a folder, double-click **Install.cmd**, then open
   **Herdr HUD** from Start. The installer runs as your normal user. Keep all files
@@ -31,14 +31,11 @@ Get the latest [alpha downloads](https://github.com/finna/herdr-hud/releases/tag
 - **Omarchy Quattro:** use the existing [Omarchy plugin](https://github.com/finna/omarchy-herdr-hud).
   `omarchy plugin add https://github.com/finna/omarchy-herdr-hud.git --enable`.
 
-These first alpha downloads are **not notarized or signed with a public publisher
-certificate** (the Mac app has a local ad-hoc signature). OS trust prompts are
-expected. Download from this repository and compare the release's SHA256SUMS.
-On a Mac, after attempting to open the app, trusted downloads can be allowed in
-System Settings → Privacy & Security → Open Anyway; see
-[Apple's instructions](https://support.apple.com/en-us/102445). This does not require
-disabling Gatekeeper. Windows may show an unknown-publisher/SmartScreen prompt;
-only proceed if you trust and have verified this download.
+Download from this repository and compare the release's SHA256SUMS.
+The Mac app and DMG have stapled Apple notarization tickets and pass Gatekeeper
+assessment. The **Windows package remains unsigned** and may show an
+unknown-publisher/SmartScreen prompt; only proceed if you trust and have verified
+this download.
 
 Close the HUD and preserve drafts before installing an update. No agent servers
 need to be restarted. To uninstall, quit the HUD, turn off its optional login
@@ -59,8 +56,9 @@ cp -R 'dist/Herdr HUD.app' ~/Applications/
 open "$HOME/Applications/Herdr HUD.app"
 ```
 
-Local builds default to ad-hoc signing. The currently published alpha is not
-notarized; broader hardware/game verification also remains future release work.
+Local builds default to ad-hoc signing. Published Mac downloads use Developer ID
+signing and Apple notarization. Broader hardware/game verification remains future
+release work.
 
 To build a drag-to-Applications disk image locally, run
 `scripts/package-macos-dmg.sh`. It creates a DMG in `dist/` with the app and an
