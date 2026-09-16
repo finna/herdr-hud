@@ -108,7 +108,9 @@ WinForms, WebView2 and native topmost windows. It does not inject into games or
 install a driver. **Exclusive fullscreen is not yet verified.** A visible overlay
 and focus return over a test window do not prove compatibility with your game.
 
-Settings and private diagnostic snapshots live in `%LOCALAPPDATA%\Herdr HUD`.
+Settings and private diagnostic snapshots live in `%LOCALAPPDATA%\Herdr HUD`,
+including `last-herdr-error.txt`, which records the most recent failed Herdr
+command and its stderr.
 The installed app lives in `%LOCALAPPDATA%\Programs\Herdr HUD`.
 The executable supports the same basic `--open`, `--close`, `--show`, `--hide`,
 `--toggle`, `--roster`, `--inspect`, `--snapshot`, and `--verify-ui` controls.
@@ -148,8 +150,9 @@ check and submission. Sends are serialized and never automatically retried.
 An ambiguous result retains the draft and blocks another send until the user
 inspects Herdr and explicitly reconciles it.
 
-Chat is a conservative formatting of recent captured Codex terminal output,
-not full structured conversation history. Other agents retain Terminal view.
+Chat is a conservative formatting of recent captured Codex or Claude Code
+terminal output, not full structured conversation history. Other agents retain
+Terminal view.
 Native approvals/questions must still be answered in Herdr.
 
 ## Prompt privacy and output limits

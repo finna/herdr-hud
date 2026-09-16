@@ -27,7 +27,7 @@ function renderHeader(){
   const state=a?.agent_status||'';const busy=state==='working';$('working').hidden=!busy;
   if(busy&&!since.has(a.id))since.set(a.id,Date.now());
   $('send').disabled=!a?.online||!['idle','done'].includes(state)||sending||uncertain.has(selected)||!$('prompt').value.trim();
-  $('prompt').disabled=!a;$('chat').disabled=a?.agent!=='codex';
+  $('prompt').disabled=!a;$('chat').disabled=!HUDModel.supportsChat(a?.agent);
   $('send-status').textContent=sending?'Sending once…':uncertain.has(selected)?'Delivery uncertain. Inspect this agent in Herdr before sending again.':!a?'Choose an agent to get started.':!a.online?'Machine offline. Your draft is retained.':state==='blocked'?'Needs your input in Herdr. Native approvals remain in its terminal.':busy?'Agent is working. You can draft the next prompt here.':['idle','done'].includes(state)?'Ready for your next prompt.':'Agent state is unknown. Sending is disabled.';
   $('reconcile').hidden=!uncertain.has(selected);
 }
@@ -35,7 +35,7 @@ function inline(text,parent){ // No terminal text is ever interpreted as HTML.
   for(const part of text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)){if(part.startsWith('**')&&part.endsWith('**'))parent.append(el('strong',part.slice(2,-2)));else if(part.startsWith('`')&&part.endsWith('`'))parent.append(el('code',part.slice(1,-1)));else parent.append(document.createTextNode(part));}
 }
 function renderOutput(){
-  const a=active(),out=$('output'),data=HUDModel.parse(lastOutput,a?.agent||'');const terminal=mode==='terminal'||a?.agent!=='codex';
+  const a=active(),out=$('output'),data=HUDModel.parse(lastOutput,a?.agent||'');const terminal=mode==='terminal'||!HUDModel.supportsChat(a?.agent);
   const signature=JSON.stringify([selected,lastOutput,terminal]);if(signature===lastRendered)return;const wasBottom=out.scrollHeight-out.scrollTop-out.clientHeight<70,scroll=out.scrollTop;const first=!lastRendered;lastRendered=signature;
   const expanded=new Set([...out.querySelectorAll('details[open]')].map(n=>n.dataset.key));out.replaceChildren();
   if(!lastOutput)out.append(el('p',a?'Loading recent output…':'Select an agent to read its recent output.','empty'));

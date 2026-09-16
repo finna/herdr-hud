@@ -5,7 +5,7 @@ function harness(platform){
   const nodes=new Map(),messages=[],listeners={};
   const document={getElementById(id){if(!nodes.has(id))nodes.set(id,{value:'',disabled:false,selectionStart:0,selectionEnd:0,setRangeText(text,start,end){this.value=this.value.slice(0,start)+text+this.value.slice(end);this.selectionStart=this.selectionEnd=start+text.length;},dispatchEvent(e){this['on'+e.type]?.(e);},setAttribute(){}});return nodes.get(id);},addEventListener(type,fn){listeners[type]=fn;}};
   const window=platform==='mac'?{webkit:{messageHandlers:{hud:{postMessage:m=>messages.push(m)}}}}:{chrome:{webview:{postMessage:m=>messages.push(m),addEventListener:(name,fn)=>listeners.native=fn}}};
-  const context=vm.createContext({window,document,setInterval(){},Event:class{constructor(type){this.type=type;}},console});
+  const context=vm.createContext({window,document,setInterval(){},Event:class{constructor(type){this.type=type;}},console,HUDModel:require('../Sources/HerdrHUD/Resources/model.js')});
   vm.runInContext(source,context);
   vm.runInContext("agents=[{id:'fixture',online:true,agent_status:'idle',agent:'codex'}];selected='fixture';",context);
   const input=document.getElementById('prompt');
