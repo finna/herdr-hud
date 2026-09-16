@@ -92,7 +92,20 @@ public sealed class ProcessRunner
         var output=Read(child.Output,StdoutLimit);var errors=Read(child.Error,StderrLimit);var input=Write();
         var all=Task.WhenAll(output,errors,input,child.Process.WaitForExitAsync(cancel.Token));
         try {await all.WaitAsync(cancel.Token);if(child.Process.ExitCode!=0)throw new InvalidOperationException("Herdr command failed.");return Encoding.UTF8.GetString(await output);}
-        catch {child.Stop();try{await all.WaitAsync(TimeSpan.FromSeconds(2));}catch{}throw new InvalidOperationException(invocation.Mutation?"Delivery uncertain or refused. Inspect Herdr before sending again.":"Herdr command timed out, failed, or exceeded its output limit.");}
+        catch {
+            child.Stop();try{await all.WaitAsync(TimeSpan.FromSeconds(2));}catch{}
+            RecordFailure(invocation,child,errors);
+            throw new InvalidOperationException(invocation.Mutation?"Delivery uncertain or refused. Inspect Herdr before sending again.":"Herdr command timed out, failed, or exceeded its output limit.");
+        }
+    }
+    static void RecordFailure(Invocation invocation,OwnedProcess child,Task<byte[]> errors) {
+        try {
+            string stderr=errors.Status==TaskStatus.RanToCompletion?Encoding.UTF8.GetString(errors.Result):"";
+            string exit=child.Process.HasExited?child.Process.ExitCode.ToString():"running";
+            string dir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Herdr HUD");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir,"last-herdr-error.txt"),$"{DateTime.Now:O}\n{invocation.Executable} {string.Join(' ',invocation.Arguments)}\nexit: {exit}\n\n{stderr}");
+        } catch {}
     }
 }
 
@@ -102,8 +115,9 @@ static class LocalPrompt {
         var request=JsonNode.Parse(input)!.AsObject();var expected=request["agent"]!.AsObject();string pane=expected.Text("pane_id");
         async Task<JsonObject> Rpc(string method,JsonObject parameters){
             const string prefix="\\\\.\\pipe\\";
-            if(!path.StartsWith(prefix,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Unsupported local Herdr pipe path.");
-            using var pipe=new NamedPipeClientStream(".",path[prefix.Length..],PipeDirection.InOut,PipeOptions.Asynchronous);
+            if(path.Length==0)throw new InvalidOperationException("Cannot locate Herdr socket.");
+            string name=path.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)?path[prefix.Length..]:path;
+            using var pipe=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous);
             await pipe.ConnectAsync(cancel.Token);string id=Guid.NewGuid().ToString();
             await pipe.WriteAsync(Encoding.UTF8.GetBytes(new JsonObject{["id"]=id,["method"]=method,["params"]=parameters}.ToJsonString()+"\n"),cancel.Token);
             using var data=new MemoryStream();var chunk=new byte[16384];
