@@ -97,14 +97,24 @@ public sealed class ProcessRunner
 }
 
 static class LocalPrompt {
+    static async Task<Stream> Connect(string path, CancellationToken cancel) {
+        const string prefix="\\\\.\\pipe\\";
+        // Herdr's Windows interprocess transport maps its filesystem-shaped
+        // socket name into the local named-pipe namespace, without normalization.
+        string name=path.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)
+            ? path[prefix.Length..]
+            : Path.IsPathFullyQualified(path) && !path.StartsWith("\\\\")
+                ? path : throw new InvalidOperationException("Unsupported local Herdr pipe path.");
+        var pipe=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous);
+        try { await pipe.ConnectAsync(cancel); return pipe; }
+        catch { pipe.Dispose(); throw; }
+    }
     public static async Task<string> Send(string path,byte[] input,TimeSpan timeout){
         using var cancel=new CancellationTokenSource(timeout);
         var request=JsonNode.Parse(input)!.AsObject();var expected=request["agent"]!.AsObject();string pane=expected.Text("pane_id");
         async Task<JsonObject> Rpc(string method,JsonObject parameters){
-            const string prefix="\\\\.\\pipe\\";
-            if(!path.StartsWith(prefix,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Unsupported local Herdr pipe path.");
-            using var pipe=new NamedPipeClientStream(".",path[prefix.Length..],PipeDirection.InOut,PipeOptions.Asynchronous);
-            await pipe.ConnectAsync(cancel.Token);string id=Guid.NewGuid().ToString();
+            using var pipe=await Connect(path,cancel.Token);
+            string id=Guid.NewGuid().ToString();
             await pipe.WriteAsync(Encoding.UTF8.GetBytes(new JsonObject{["id"]=id,["method"]=method,["params"]=parameters}.ToJsonString()+"\n"),cancel.Token);
             using var data=new MemoryStream();var chunk=new byte[16384];
             while(true){int n=await pipe.ReadAsync(chunk.AsMemory(0,Math.Min(chunk.Length,ProcessRunner.StdoutLimit-(int)data.Length+1)),cancel.Token);if(n==0)throw new InvalidOperationException("Missing acknowledgement.");if(data.Length+n>ProcessRunner.StdoutLimit)throw new InvalidOperationException("Socket output limit exceeded.");int end=Array.IndexOf(chunk,(byte)10,0,n);data.Write(chunk,0,end<0?n:end);if(end>=0)break;}
