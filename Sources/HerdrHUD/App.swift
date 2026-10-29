@@ -36,7 +36,7 @@ final class BubbleView: NSView {
     override func rightMouseDown(with event: NSEvent) { if let menu = app?.status.menu { NSMenu.popUpContextMenu(menu,with:event,for:self) } }
 }
 final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
-    let client = HerdrClient(), work = DispatchQueue(label:"herdr-hud.transport",qos:.userInitiated)
+    let client = HerdrClient(), shepherdr = ShepherdrClient(), work = DispatchQueue(label:"herdr-hud.transport",qos:.userInitiated)
     let defaults = UserDefaults.standard
     var bubble: NSPanel!, panel: OverlayPanel!, bubbleView: BubbleView!, web: WKWebView!, status: NSStatusItem!
     var timer: Timer?, hotkeys: [EventHotKeyRef] = [], handler: EventHandlerRef?
@@ -177,9 +177,11 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     }
     @objc func screensChanged() { restorePosition(); positionPanel() }
     @objc func spaceChanged() { if visible { bubble.orderFrontRegardless(); if panelOpen { panel.orderFrontRegardless() }; toast?.orderFrontRegardless() } }
+    var rosterMode: String { defaults.string(forKey:"rosterMode") == "shepherdr" ? "shepherdr" : "herdr" }
     @objc func refresh() {
         guard visible, !polling else { return }; polling = true
-        work.async { let data = self.client.snapshot(); DispatchQueue.main.async {
+        let mode = rosterMode
+        work.async { var data = self.client.snapshot(); if mode == "shepherdr" { data["shepherdr"] = self.shepherdr.overlay(agents:data["agents"] as? [Row] ?? []) }; DispatchQueue.main.async {
             self.polling = false; self.lastSnapshot = data; if self.visible { self.emit("roster",data) }; self.diagnostics()
         } }
     }
@@ -188,7 +190,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         guard message.frameInfo.isMainFrame, let data = message.body as? Row, let operation = data["op"] as? String else { return }
         let requestID = data["requestID"] as? String ?? ""
         switch operation {
-        case "ready": ready = true; emit("preferences",["selectedAgent":defaults.string(forKey:"selectedAgent") ?? "","rosterWidth":defaults.double(forKey:"rosterWidth"),"mode":defaults.string(forKey:"viewMode") ?? "chat"]); emit("visibility",["open":panelOpen]); if !lastSnapshot.isEmpty { emit("roster",lastSnapshot) }; if !hotkeyWarning.isEmpty { emit("notice",["message":hotkeyWarning]) }
+        case "ready": ready = true; emit("preferences",["selectedAgent":defaults.string(forKey:"selectedAgent") ?? "","rosterWidth":defaults.double(forKey:"rosterWidth"),"mode":defaults.string(forKey:"viewMode") ?? "chat","rosterMode":rosterMode,"shepherdrSupported":true]); emit("visibility",["open":panelOpen]); if !lastSnapshot.isEmpty { emit("roster",lastSnapshot) }; if !hotkeyWarning.isEmpty { emit("notice",["message":hotkeyWarning]) }
         case "close": closePanel()
         case "hide": if visible { toggleVisibility() }
         case "refresh": refresh()
@@ -196,6 +198,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
             if let id = data["selectedAgent"] as? String, id.utf8.count <= 8192 { defaults.set(id,forKey:"selectedAgent") }
             if let width = data["rosterWidth"] as? Double, width >= 155 && width <= 600 { defaults.set(width,forKey:"rosterWidth") }
             if let mode = data["mode"] as? String, ["chat","terminal"].contains(mode) { defaults.set(mode,forKey:"viewMode") }
+            if let mode = data["rosterMode"] as? String, ["herdr","shepherdr"].contains(mode), mode != rosterMode { defaults.set(mode,forKey:"rosterMode"); refresh() }
         case "badge": bubbleView.count = data["count"] as? Int ?? 0
         case "alertPreview":
             if !panelOpen && visible, let id = data["id"] as? String {

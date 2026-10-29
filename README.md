@@ -152,6 +152,29 @@ Chat is a conservative formatting of recent captured Codex terminal output,
 not full structured conversation history. Other agents retain Terminal view.
 Native approvals/questions must still be answered in Herdr.
 
+## Shepherdr mode (Mac)
+
+If you run [Shepherdr](https://github.com/eliasstravik/shepherdr) on this Mac, the
+**Herdr | Shepherdr** switch above the roster shows your Shepherdr spaces instead
+of raw Herdr agents. Each space appears as its coordinator, with its tasks under
+it: task id, title and status (needs you, ready to merge, working, queued, merged
+and so on). Needs-you tasks, and coordinators that ask you something, count
+toward the H badge. Open a coordinator or task to read its recent output and send
+a follow-up with the same composer. The choice is remembered with your other
+preferences; Herdr mode is unchanged.
+
+Spaces and tasks, across all machines, come from the local Shepherdr server's
+read-only snapshot (`127.0.0.1`, the port in `~/.shepherdr/server.json`). Each
+coordinator or task is linked to the herdr agent Shepherdr started for it by the
+herdr agent name in Shepherdr's own agent records (`~/.shepherdr/agents.json`,
+and `~/.shepherdr/machines/*/` for other machines). Nothing is guessed from pane
+names: a row without exactly one matching running agent is shown but cannot be
+opened. Reads and prompts then use the same checked Herdr path as Herdr mode, so
+stale, busy, blocked and unknown agents are refused and sends are never retried.
+A prompt goes straight into the agent's terminal, as if typed there.
+`HerdrHUD --roster --shepherdr` prints the live read-only roster. The Windows
+app does not have this mode yet; its switch stays hidden.
+
 ## Prompt privacy and output limits
 
 Prompt text never appears in process arguments or SSH command strings. It travels
@@ -232,7 +255,8 @@ node --check Sources/HerdrHUD/Resources/app.js
 python3 Tests/test_prompt_helper.py
 ```
 
-Node is needed only for JavaScript development tests; Python 3 is used by socket
+Shepherdr tests use a fixture snapshot and temporary agent records, never the
+live Shepherdr server. Node is needed only for JavaScript development tests; Python 3 is used by socket
 fixtures and remote-helper tests during development. Swift tests exercise
 identity changes, readiness, argument quoting, ambiguous delivery, large output,
 saved-machine removal, offline caching, and reconnects with controlled transports.
