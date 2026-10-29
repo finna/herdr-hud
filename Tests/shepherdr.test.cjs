@@ -3,7 +3,7 @@ const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const {shepherdrRows}=require('../Sources/HerdrHUD/Resources/model.js');
 const agent=(id,status,extra={})=>({id,terminal_id:id,agent_status:status,online:true,agent:'claude',machine_label:'Mac Studio',workspace_label:'w',...extra});
 const data={spaces:[{id:'p:Mac:app',name:'app',machine:'Mac Studio',agent_id:'C',need:false},{id:'p:Lap:~',name:'home',machine:'Laptop',agent_id:null,offline:true}],
-  tasks:[{id:'APP-2',title:'Merged one',status:'done',sub:'Merged',place:'p:Mac:app',agent_id:null},{id:'APP-3',title:'Busy',status:'work',sub:'Writing tests',place:'p:Mac:app',agent_id:'B'},
+  tasks:[{id:'APP-2',title:'Merged one',status:'done',sub:'Merged',place:'p:Mac:app',agent_id:null,chat:'APP-2/Agent'},{id:'APP-3',title:'Busy',status:'work',sub:'Writing tests',place:'p:Mac:app',agent_id:'B'},
     {id:'APP-1',title:'Asks',status:'need',sub:'Waits for your reply',place:'p:Mac:app',agent_id:'N'},{id:'APP-9',title:'Elsewhere',status:'work',place:'p:Gone:x',agent_id:'B'}]};
 const agents=[agent('C','idle'),agent('B','working'),agent('N','done')];
 test('spaces lead their tasks, needs-you first and merged last',()=>{
@@ -11,6 +11,7 @@ test('spaces lead their tasks, needs-you first and merged last',()=>{
   assert.deepEqual(rows.map(r=>r.key),['space:p:Mac:app','task:APP-1','task:APP-3','task:APP-2','space:p:Lap:~']);
   assert.deepEqual(rows.map(r=>r.state),['Idle','Needs you','Working','Merged','Offline']);
   assert.equal(rows[1].title,'APP-1 · Asks');assert.equal(rows[1].need,true);assert.equal(rows[3].agent_id,'');assert.equal(rows[4].agent_id,'');
+  assert.equal(rows[3].view_id,'shepherdr:APP-2/Agent','a merged task opens its Shepherdr chat');assert.equal(rows[4].view_id,'','no agent and no chat: nothing to open');
 });
 test('a row links only an agent the herdr roster has',()=>{assert.equal(shepherdrRows(data,[agent('C','idle')]).find(r=>r.key==='task:APP-3').agent_id,'');assert.deepEqual(shepherdrRows(null,agents),[]);});
 
@@ -33,7 +34,12 @@ test('Shepherdr mode lists spaces and tasks, badges needs-you, and sends only th
   assert.equal(h.$('modes').hidden,false);assert.equal(h.$('mode-shepherdr').getAttribute('aria-pressed'),'true');
   h.window.receive({type:'roster',data:{agents,machines:[],shepherdr:data}});
   assert.equal(h.buttons().length,5);assert.equal(h.badge(),1);
-  assert.equal(h.buttons()[3].disabled,true,'a merged task without an agent cannot be opened');
+  assert.equal(h.buttons()[4].disabled,true,'a space with neither agent nor chat cannot be opened');
+  h.window.receive({type:'visibility',data:{open:true}});h.window.receive({type:'output',data:{id:h.messages.filter(m=>m.op==='output').at(-1).id,provider:'claude',text:'earlier read'}});
+  h.buttons()[3].click();assert.equal(h.$('title').textContent,'APP-2 · Merged one');
+  assert.equal(h.messages.filter(m=>m.op==='output').at(-1).id,'shepherdr:APP-2/Agent');
+  h.window.receive({type:'output',data:{id:'shepherdr:APP-2/Agent',provider:'shepherdr',text:'Agent\nMerged.'}});
+  h.$('prompt').value='more';h.$('prompt').oninput();assert.equal(h.$('send').disabled,true,'a not-running agent is read only');assert.match(h.$('send-status').textContent,/read only/);
   h.buttons()[2].click();assert.equal(h.$('title').textContent,'APP-3 · Busy');assert.match(h.$('identity').textContent,/^app · Mac Studio · Working/);
   h.$('prompt').value='next step';h.$('prompt').oninput();assert.equal(h.$('send').disabled,true,'a working agent is refused');
   h.buttons()[0].click();h.$('prompt').value='next step';h.$('prompt').oninput();assert.equal(h.$('send').disabled,false);

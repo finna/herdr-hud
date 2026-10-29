@@ -6,10 +6,10 @@ let agents=[],selected='',opened=false,mode='chat',filter='',reading=false,sendi
 let rosterMode='herdr',shepherdr=null,supportsShepherdr=false;
 let baseline=false,unread=new Set(),drafts=new Map(),outputs=new Map(),since=new Map(),uncertain=new Set(),promptByRequest=new Map();
 function request(op,extra={}){const requestID=`${Date.now()}-${++requestSequence}`;post({op,requestID,...extra});return requestID;}
-function active(){return agents.find(a=>a.id===selected);}
+function active(){const a=agents.find(a=>a.id===selected);if(a||!selected.startsWith('shepherdr:'))return a;const r=linked(selected);return r&&{id:r.view_id,online:true,agent_status:'readonly',agent:'shepherdr',workspace_label:r.space||r.title,machine_label:r.machine};}
 function name(a){return a.tab_label||a.name||a.pane_id||'Agent';}
 function rows(){return rosterMode==='shepherdr'&&supportsShepherdr?HUDModel.shepherdrRows(shepherdr,agents):null;}
-function linked(id){return id?rows()?.find(r=>r.agent_id===id):undefined;}
+function linked(id){return id?rows()?.find(r=>r.view_id===id):undefined;}
 function label(a){return linked(a.id)?.title||name(a);}
 function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
@@ -17,10 +17,10 @@ function badge(){const list=rows();post({op:'badge',count:list?list.filter(r=>r.
 function renderModes(){$('modes').hidden=!supportsShepherdr;$('mode-herdr').setAttribute('aria-pressed',String(rosterMode==='herdr'));$('mode-shepherdr').setAttribute('aria-pressed',String(rosterMode==='shepherdr'));$('roster-label').textContent=rosterMode==='shepherdr'&&supportsShepherdr?'SPACES & TASKS':'AGENTS';$('search').placeholder=rosterMode==='shepherdr'&&supportsShepherdr?'Find a space or task…':'Find an agent…';}
 function renderShepherdr(list,roster,scroll){
   const shown=list.filter(r=>`${r.title} ${r.detail} ${r.state} ${r.machine}`.toLowerCase().includes(filter));$('count').textContent=list.filter(r=>r.kind==='task').length;
-  roster.replaceChildren(...shown.map(r=>{const a=agents.find(x=>x.id===r.agent_id),on=!!r.agent_id&&r.agent_id===selected,button=el('button',undefined,'agent '+r.kind+(on?' selected':'')+(a&&!a.online?' offline':''));button.setAttribute('aria-pressed',String(on));button.disabled=!r.agent_id;
+  roster.replaceChildren(...shown.map(r=>{const a=agents.find(x=>x.id===r.agent_id),on=!!r.view_id&&r.view_id===selected,button=el('button',undefined,'agent '+r.kind+(on?' selected':'')+(a&&!a.online?' offline':''));button.setAttribute('aria-pressed',String(on));button.disabled=!r.view_id;
     const title=el('div',undefined,'agent-title');title.append(el('span',undefined,'dot '+(r.need||a?.agent_status==='blocked'||unread.has(r.agent_id)?'attention':a?.agent_status==='working'?'busy':'')),el('span',r.title));button.append(title);
     const meta=el('div',undefined,'agent-meta');if(r.detail)meta.append(el('div',r.detail));meta.append(el('div',r.state,'agent-state'+(r.need?' need':'')));button.append(meta);
-    button.title=r.agent_id?'':`No running herdr agent for this ${r.kind}`;if(r.agent_id)button.onclick=()=>select(r.agent_id);return button;}));
+    button.title=r.agent_id?'':r.view_id?'Not running: opens its Shepherdr chat, read only':`No running herdr agent for this ${r.kind}`;if(r.view_id)button.onclick=()=>select(r.view_id);return button;}));
   if(!shown.length)roster.append(el('p',!shepherdr?'Reading Shepherdr…':list.length?'No matching spaces or tasks.':'No Shepherdr spaces found.','empty'));roster.scrollTop=scroll;
 }
 function renderRoster(){
@@ -41,7 +41,7 @@ function renderHeader(){
   if(busy&&!since.has(a.id))since.set(a.id,Date.now());
   $('send').disabled=!a?.online||!['idle','done'].includes(state)||sending||uncertain.has(selected)||!$('prompt').value.trim();
   $('prompt').disabled=!a;$('chat').disabled=a?.agent!=='codex';
-  $('send-status').textContent=sending?'Sending once…':uncertain.has(selected)?'Delivery uncertain. Inspect this agent in Herdr before sending again.':!a?'Choose an agent to get started.':!a.online?'Machine offline. Your draft is retained.':state==='blocked'?'Needs your input in Herdr. Native approvals remain in its terminal.':busy?'Agent is working. You can draft the next prompt here.':['idle','done'].includes(state)?'Ready for your next prompt.':'Agent state is unknown. Sending is disabled.';
+  $('send-status').textContent=sending?'Sending once…':uncertain.has(selected)?'Delivery uncertain. Inspect this agent in Herdr before sending again.':!a?'Choose an agent to get started.':!a.online?'Machine offline. Your draft is retained.':state==='readonly'?'Not running. Its Shepherdr chat is shown, read only.':state==='blocked'?'Needs your input in Herdr. Native approvals remain in its terminal.':busy?'Agent is working. You can draft the next prompt here.':['idle','done'].includes(state)?'Ready for your next prompt.':'Agent state is unknown. Sending is disabled.';
   $('reconcile').hidden=!uncertain.has(selected);
 }
 function inline(text,parent){ // No terminal text is ever interpreted as HTML.

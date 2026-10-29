@@ -168,8 +168,9 @@ read-only snapshot (`127.0.0.1`, the port in `~/.shepherdr/server.json`). Each
 coordinator or task is linked to the herdr agent Shepherdr started for it by the
 herdr agent name in Shepherdr's own agent records (`~/.shepherdr/agents.json`,
 and `~/.shepherdr/machines/*/` for other machines). Nothing is guessed from pane
-names: a row without exactly one matching running agent is shown but cannot be
-opened. Reads and prompts then use the same checked Herdr path as Herdr mode, so
+names. A coordinator or task without exactly one matching running agent (a
+merged task, for example) opens read only, showing its latest Shepherdr chat
+messages. Reads and prompts then use the same checked Herdr path as Herdr mode, so
 stale, busy, blocked and unknown agents are refused and sends are never retried.
 A prompt goes straight into the agent's terminal, as if typed there.
 `HerdrHUD --roster --shepherdr` prints the live read-only roster. The Windows

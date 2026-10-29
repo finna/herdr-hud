@@ -285,7 +285,8 @@ the local Shepherdr server (the CLI's `space list` and `task list` cover only
 this machine and omit each task's space) and links coordinators and tasks to
 herdr agents through Shepherdr's agent records (chat key → herdr agent name).
 Only spaces, tasks, asks and attention requests are kept from the snapshot.
-Sending reuses `HerdrClient.prompt` unchanged. Shepherdr's own `task tell`
+Sending reuses `HerdrClient.prompt` unchanged. A row with no running agent opens
+read only through `GET /api/chat`, only for chat keys the last roster listed. Shepherdr's own `task tell`
 speaks as a coordinator, so it is not used for the human's prompts.
 
 Live check on the Mac Studio: `--roster --shepherdr` read 5 spaces (one on an
