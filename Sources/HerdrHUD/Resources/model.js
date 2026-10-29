@@ -16,5 +16,22 @@
       else body.push(line);if(line.trimStart().startsWith('```'))fenced=!fenced;
     }flush();return {text:lines.join('\n').trimEnd(),model,reasoning,blocks};
   }
-  const api={sorted,alerts,parse,identity};if(typeof module!=='undefined')module.exports=api;else root.HUDModel=api;
+  // Shepherdr mode: each space's coordinator, then its tasks (needs you first, merged last), linked to herdr agents by id.
+  // A row without a running agent opens read only (view_id shepherdr:<chat key>), showing its Shepherdr chat.
+  const TASK_ORDER=['need','ready','work','merging','todo','queued','done'],TASK_LABEL={need:'Needs you',ready:'Ready to merge',merging:'Merging',work:'Working',queued:'Queued',todo:'To do',done:'Done'};
+  function shepherdrRows(data,agents){
+    const byId=new Map(agents.map(a=>[a.id,a])),rank=t=>{const i=TASK_ORDER.indexOf(t.status);return i<0?TASK_ORDER.length:i;},rows=[];
+    for(const space of data?.spaces||[]){
+      const agent=byId.get(space.agent_id),view=(id,chat)=>id||(chat?'shepherdr:'+chat:'');
+      rows.push({kind:'space',key:'space:'+space.id,agent_id:agent?space.agent_id:'',view_id:view(agent?space.agent_id:'',space.chat),title:space.name,detail:space.machine+' · coordinator',machine:space.machine,need:!!space.need,
+        state:space.need?'Needs you':space.offline||agent?.online===false?'Offline':!agent?'Not running':agent.agent_status==='working'?'Working':agent.agent_status==='blocked'?'Blocked':'Idle'});
+      (data.tasks||[]).filter(t=>t.place===space.id).map((t,i)=>({t,i})).sort((a,b)=>rank(a.t)-rank(b.t)||a.i-b.i).forEach(({t})=>{
+        const state=t.status==='done'?t.sub||'Done':TASK_LABEL[t.status]||t.status;
+        const id=byId.has(t.agent_id)?t.agent_id:'';
+        rows.push({kind:'task',key:`task:${space.id}:${t.id}`,agent_id:id,view_id:view(id,t.chat),title:`${t.id} · ${t.title}`,detail:t.sub&&t.sub!==state?t.sub:'',space:space.name,machine:space.machine,need:t.status==='need',status:t.status,state});
+      });
+    }
+    return rows;
+  }
+  const api={sorted,alerts,parse,identity,shepherdrRows};if(typeof module!=='undefined')module.exports=api;else root.HUDModel=api;
 })(globalThis);

@@ -3,15 +3,30 @@ const $=id=>document.getElementById(id);
 const post=data=>window.webkit?.messageHandlers?.hud ? window.webkit.messageHandlers.hud.postMessage(data) : window.chrome.webview.postMessage(data);
 if(window.chrome?.webview)window.chrome.webview.addEventListener('message',event=>window.receive(event.data));
 let agents=[],selected='',opened=false,mode='chat',filter='',reading=false,sending=false,requestSequence=0,lastOutput='',lastRendered='',selectionEpoch=0;
+let rosterMode='herdr',shepherdr=null,supportsShepherdr=false,selectedRow='';
 let baseline=false,unread=new Set(),drafts=new Map(),outputs=new Map(),since=new Map(),uncertain=new Set(),promptByRequest=new Map();
 function request(op,extra={}){const requestID=`${Date.now()}-${++requestSequence}`;post({op,requestID,...extra});return requestID;}
-function active(){return agents.find(a=>a.id===selected);}
+function active(){const a=agents.find(a=>a.id===selected);if(a||!selected.startsWith('shepherdr:'))return a;const r=linked(selected);return r&&{id:r.view_id,online:true,agent_status:'readonly',agent:'shepherdr',workspace_label:r.space||r.title,machine_label:r.machine};}
 function name(a){return a.tab_label||a.name||a.pane_id||'Agent';}
+function rows(){return rosterMode==='shepherdr'&&supportsShepherdr?HUDModel.shepherdrRows(shepherdr,agents):null;}
+function linked(id){return id?rows()?.find(r=>r.view_id===id):undefined;}
+function label(a){return linked(a.id)?.title||name(a);}
 function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
-function badge(){post({op:'badge',count:agents.filter(a=>a.agent_status==='blocked'||unread.has(a.id)).length});}
+function badge(){const list=rows();post({op:'badge',count:list?list.filter(r=>r.need||unread.has(r.agent_id)).length:agents.filter(a=>a.agent_status==='blocked'||unread.has(a.id)).length});}
+// A Shepherdr row keeps its selection when its agent starts, finishes or is replaced; the draft and any uncertain-send block move with it.
+function follow(){if(!selectedRow)selectedRow=linked(selected)?.key||'';const r=selectedRow&&rows()?.find(r=>r.key===selectedRow);if(!r?.view_id||r.view_id===selected)return;if(uncertain.has(selected))uncertain.add(r.view_id);drafts.set(r.view_id,$('prompt').value);select(r.view_id);}
+function renderModes(){$('modes').hidden=!supportsShepherdr;$('mode-herdr').setAttribute('aria-pressed',String(rosterMode==='herdr'));$('mode-shepherdr').setAttribute('aria-pressed',String(rosterMode==='shepherdr'));$('roster-label').textContent=rosterMode==='shepherdr'&&supportsShepherdr?'SPACES & TASKS':'AGENTS';$('search').placeholder=rosterMode==='shepherdr'&&supportsShepherdr?'Find a space or task…':'Find an agent…';}
+function renderShepherdr(list,roster,scroll){
+  const shown=list.filter(r=>`${r.title} ${r.detail} ${r.state} ${r.machine}`.toLowerCase().includes(filter));$('count').textContent=list.filter(r=>r.kind==='task').length;
+  roster.replaceChildren(...shown.map(r=>{const a=agents.find(x=>x.id===r.agent_id),on=!!r.view_id&&r.view_id===selected,button=el('button',undefined,'agent '+r.kind+(on?' selected':'')+(a&&!a.online?' offline':''));button.setAttribute('aria-pressed',String(on));button.disabled=!r.view_id;
+    const title=el('div',undefined,'agent-title');title.append(el('span',undefined,'dot '+(r.need||a?.agent_status==='blocked'||unread.has(r.agent_id)?'attention':a?.agent_status==='working'?'busy':'')),el('span',r.title));button.append(title);
+    const meta=el('div',undefined,'agent-meta');if(r.detail)meta.append(el('div',r.detail));meta.append(el('div',r.state,'agent-state'+(r.need?' need':'')));button.append(meta);
+    button.title=r.agent_id?'':r.view_id?'Not running: opens its Shepherdr chat, read only':`No running herdr agent for this ${r.kind}`;if(r.view_id)button.onclick=()=>select(r.view_id);return button;}));
+  if(!shown.length)roster.append(el('p',!shepherdr?'Reading Shepherdr…':list.length?'No matching spaces or tasks.':'No Shepherdr spaces found.','empty'));roster.scrollTop=scroll;
+}
 function renderRoster(){
-  $('count').textContent=agents.length;const roster=$('roster'),scroll=roster.scrollTop;
+  const roster=$('roster'),scroll=roster.scrollTop,list=rows();if(list)return renderShepherdr(list,roster,scroll);$('count').textContent=agents.length;
   const items=HUDModel.sorted(agents,unread).filter(a=>`${name(a)} ${a.workspace_label} ${a.machine_label} ${a.agent}`.toLowerCase().includes(filter));
   roster.replaceChildren(...items.map(a=>{const button=el('button',undefined,'agent'+(a.id===selected?' selected':'')+(!a.online?' offline':''));button.setAttribute('aria-pressed',String(a.id===selected));
     const title=el('div',undefined,'agent-title');title.append(el('span',undefined,'dot '+(a.agent_status==='working'?'busy':a.agent_status==='blocked'||unread.has(a.id)?'attention':'')),el('span',name(a)));button.append(title);
@@ -19,16 +34,16 @@ function renderRoster(){
   if(!items.length)roster.append(el('p',agents.length?'No matching agents.':'No agents found. Start an agent in Herdr.','empty'));roster.scrollTop=scroll;
 }
 function select(id){
-  drafts.set(selected,$('prompt').value);selected=id;request('preferences',{selectedAgent:id});selectionEpoch++;lastRendered='';$('prompt').value=drafts.get(id)||'';
+  drafts.set(selected,$('prompt').value);selectedRow=linked(id)?.key||'';selected=id;request('preferences',{selectedAgent:id});selectionEpoch++;lastRendered='';$('prompt').value=drafts.get(id)||'';
   lastOutput=outputs.get(id)?.text||'';renderRoster();renderHeader();renderOutput();read();
 }
 function renderHeader(){
-  const a=active();$('title').textContent=a?name(a):'Select an agent';$('identity').textContent=a?`${a.workspace_label} · ${a.machine_label} · ${a.agent}`:'Your configured Herdr machines appear automatically';
+  const a=active(),row=a&&linked(a.id);$('title').textContent=a?label(a):'Select an agent';$('identity').textContent=row?`${row.kind==='task'?row.space+' · ':''}${row.machine} · ${row.state} · ${a.agent}`:a?`${a.workspace_label} · ${a.machine_label} · ${a.agent}`:'Your configured Herdr machines appear automatically';
   const state=a?.agent_status||'';const busy=state==='working';$('working').hidden=!busy;
   if(busy&&!since.has(a.id))since.set(a.id,Date.now());
   $('send').disabled=!a?.online||!['idle','done'].includes(state)||sending||uncertain.has(selected)||!$('prompt').value.trim();
   $('prompt').disabled=!a;$('chat').disabled=a?.agent!=='codex';
-  $('send-status').textContent=sending?'Sending once…':uncertain.has(selected)?'Delivery uncertain. Inspect this agent in Herdr before sending again.':!a?'Choose an agent to get started.':!a.online?'Machine offline. Your draft is retained.':state==='blocked'?'Needs your input in Herdr. Native approvals remain in its terminal.':busy?'Agent is working. You can draft the next prompt here.':['idle','done'].includes(state)?'Ready for your next prompt.':'Agent state is unknown. Sending is disabled.';
+  $('send-status').textContent=sending?'Sending once…':uncertain.has(selected)?'Delivery uncertain. Inspect this agent in Herdr before sending again.':!a?'Choose an agent to get started.':!a.online?'Machine offline. Your draft is retained.':state==='readonly'?'Not running. Its Shepherdr chat is shown, read only.':state==='blocked'?'Needs your input in Herdr. Native approvals remain in its terminal.':busy?'Agent is working. You can draft the next prompt here.':['idle','done'].includes(state)?'Ready for your next prompt.':'Agent state is unknown. Sending is disabled.';
   $('reconcile').hidden=!uncertain.has(selected);
 }
 function inline(text,parent){ // No terminal text is ever interpreted as HTML.
@@ -51,15 +66,15 @@ function read(){if(!opened||reading||!active()?.online)return;reading=true;reque
 function send(){if($('send').disabled)return;const id=selected,message=$('prompt').value;sending=true;notice('');const requestID=request('prompt',{id,message});promptByRequest.set(requestID,{id,message});renderHeader();}
 window.receive=({type,data})=>{
   if(type==='roster'){
-    const before=agents;agents=data.agents||[];
+    const before=agents;agents=data.agents||[];shepherdr=data.shepherdr||(rosterMode==='shepherdr'?shepherdr:null);
     if(baseline)for(const a of agents){const old=before.find(b=>b.id===a.id);if(old&&a.online&&old.online&&old.agent_status!==a.agent_status)unread.add(a.id);}
     const updates=baseline?HUDModel.alerts(before,agents):[];baseline=true;
     for(const a of agents){if(a.agent_status==='working'&&!since.has(a.id))since.set(a.id,Date.now());if(a.agent_status!=='working')since.delete(a.id);}
     const valid=new Set(agents.map(a=>a.id));unread=new Set([...unread].filter(id=>valid.has(id)));
-    if(updates.length&&!opened){const a=updates[0];request('alertPreview',{id:a.id,title:name(a)+(a.agent_status==='blocked'?' needs input':' finished')});}
+    if(updates.length&&!opened){const a=updates[0];request('alertPreview',{id:a.id,title:label(a)+(a.agent_status==='blocked'?' needs input':' finished')});}
     $('machines').replaceChildren(...(data.machines||[]).map(m=>{const node=el('span',undefined,'machine');node.append(el('span',undefined,'dot '+(m.online?'online':'')),document.createTextNode(`${m.label} · ${m.online?`${m.count} agents`:'offline'}`));node.title=m.error||'';return node;}));
-    if(data.discoveryError)notice('Herdr setup: '+data.discoveryError);
-    if(!selected&&agents.length)select(agents[0].id);renderRoster();renderHeader();badge();read();
+    if(data.discoveryError)notice('Herdr setup: '+data.discoveryError);else if(rosterMode==='shepherdr'&&data.shepherdr?.error)notice('Shepherdr: '+data.shepherdr.error);
+    follow();if(!selected&&agents.length)select(rows()?.find(r=>r.agent_id)?.agent_id||agents[0].id);renderRoster();renderHeader();badge();read();
   }else if(type==='visibility'){opened=data.open;if(opened){renderHeader();read();}}
   else if(type==='resetBaseline'){baseline=false;}
   else if(type==='select'){select(data.id);}
@@ -72,7 +87,7 @@ window.receive=({type,data})=>{
     const pending=promptByRequest.get(data.requestID);if(!pending)return;promptByRequest.delete(data.requestID);sending=false;
     if(data.error){notice(data.error);if(/uncertain/i.test(data.error))uncertain.add(pending.id);}
     else{if(selected===pending.id&&$('prompt').value===pending.message)$('prompt').value='';if(drafts.get(pending.id)===pending.message)drafts.delete(pending.id);notice('Prompt sent.');request('refresh');}renderHeader();
-  }else if(type==='preferences'){if(data.selectedAgent&&!selected)selected=data.selectedAgent;if(data.rosterWidth>=155)document.querySelector('aside').style.width=data.rosterWidth+'px';mode=data.mode||'chat';}
+  }else if(type==='preferences'){if(data.selectedAgent&&!selected)selected=data.selectedAgent;if(data.rosterWidth>=155)document.querySelector('aside').style.width=data.rosterWidth+'px';mode=data.mode||'chat';supportsShepherdr=!!data.shepherdrSupported;rosterMode=supportsShepherdr&&data.rosterMode==='shepherdr'?'shepherdr':'herdr';renderModes();if(rosterMode==='shepherdr')renderRoster();}
   else if(type==='notice'){notice(data.message);}
 };
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!event.isComposing){event.preventDefault();request('close');}});
@@ -90,6 +105,7 @@ $('prompt').onkeydown=e=>{
     input.dispatchEvent(new Event('input',{bubbles:true}));
   }else if(!e.repeat){send();}
 };
+for(const view of ['herdr','shepherdr'])$('mode-'+view).onclick=()=>{if(rosterMode===view)return;rosterMode=view;shepherdr=null;selectedRow='';notice('');request('preferences',{rosterMode:view});renderModes();renderRoster();renderHeader();badge();};
 for(const view of ['chat','terminal'])$(view).onclick=()=>{mode=view;request('preferences',{mode});lastRendered='';renderOutput();};
 const divider=$('divider');divider.onpointerdown=e=>{divider.setPointerCapture(e.pointerId);};divider.onpointermove=e=>{if(divider.hasPointerCapture(e.pointerId)){document.querySelector('aside').style.width=Math.min(Math.max(e.clientX,155),innerWidth*.42)+'px';}};
 divider.onpointerup=()=>request('preferences',{rosterWidth:document.querySelector('aside').offsetWidth});

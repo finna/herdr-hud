@@ -276,3 +276,22 @@ links in the beginner guide returned HTTP 200, including both download assets.
 This is a documentation-only change; no applications or agent servers were
 restarted, no setup commands mutated live Herdr state, and release binaries were
 not rebuilt. A fresh-user installation walkthrough was not performed.
+
+## Shepherdr mode — October 29, 2026
+
+The Mac roster has a Herdr | Shepherdr switch (defaults key `rosterMode`). In
+Shepherdr mode `Sources/HerdrHUD/Shepherdr.swift` reads `GET /api/snapshot` from
+the local Shepherdr server (the CLI's `space list` and `task list` cover only
+this machine and omit each task's space) and links coordinators and tasks to
+herdr agents through Shepherdr's agent records (chat key → herdr agent name).
+Only spaces, tasks, asks and attention requests are kept from the snapshot.
+Sending reuses `HerdrClient.prompt` unchanged. A row with no running agent opens
+read only through `GET /api/chat`, only for chat keys the last roster listed. Shepherdr's own `task tell`
+speaks as a coordinator, so it is not used for the human's prompts.
+
+Live check on the Mac Studio: `--roster --shepherdr` read 5 spaces (one on an
+offline laptop) and 11 tasks, every running agent linked; the real UI rendered
+that data in a browser harness whose bridge never sends. The installed app was
+not replaced. Windows shares the UI files; its host does not advertise
+Shepherdr support, so the switch stays hidden there.
+

@@ -1,6 +1,8 @@
 import AppKit
 if CommandLine.arguments.contains("--roster") {
-    print(encode(HerdrClient().snapshot()))
+    var roster = HerdrClient().snapshot()
+    if CommandLine.arguments.contains("--shepherdr") { roster["shepherdr"] = ShepherdrClient().overlay(agents:roster["agents"] as? [Row] ?? []) }
+    print(encode(roster))
 } else if let command = CommandLine.arguments.dropFirst().first, ["--open","--close","--toggle","--hide","--show","--snapshot","--inspect","--verify-ui","--preview-alert"].contains(command) {
     DistributedNotificationCenter.default().postNotificationName(HUDApp.channel,object:String(command.dropFirst(2)),userInfo:nil,deliverImmediately:true)
 } else {
