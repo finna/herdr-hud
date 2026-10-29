@@ -170,7 +170,8 @@ herdr agent name in Shepherdr's own agent records (`~/.shepherdr/agents.json`,
 and `~/.shepherdr/machines/*/` for other machines). Nothing is guessed from pane
 names. A coordinator or task without exactly one matching running agent (a
 merged task, for example) opens read only, showing its latest Shepherdr chat
-messages. Reads and prompts then use the same checked Herdr path as Herdr mode, so
+messages; for spaces on other machines this needs a running agent. A selected
+task stays selected, with its draft, when its agent starts, finishes or is replaced. Reads and prompts then use the same checked Herdr path as Herdr mode, so
 stale, busy, blocked and unknown agents are refused and sends are never retried.
 A prompt goes straight into the agent's terminal, as if typed there.
 `HerdrHUD --roster --shepherdr` prints the live read-only roster. The Windows

@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 const post=data=>window.webkit?.messageHandlers?.hud ? window.webkit.messageHandlers.hud.postMessage(data) : window.chrome.webview.postMessage(data);
 if(window.chrome?.webview)window.chrome.webview.addEventListener('message',event=>window.receive(event.data));
 let agents=[],selected='',opened=false,mode='chat',filter='',reading=false,sending=false,requestSequence=0,lastOutput='',lastRendered='',selectionEpoch=0;
-let rosterMode='herdr',shepherdr=null,supportsShepherdr=false;
+let rosterMode='herdr',shepherdr=null,supportsShepherdr=false,selectedRow='';
 let baseline=false,unread=new Set(),drafts=new Map(),outputs=new Map(),since=new Map(),uncertain=new Set(),promptByRequest=new Map();
 function request(op,extra={}){const requestID=`${Date.now()}-${++requestSequence}`;post({op,requestID,...extra});return requestID;}
 function active(){const a=agents.find(a=>a.id===selected);if(a||!selected.startsWith('shepherdr:'))return a;const r=linked(selected);return r&&{id:r.view_id,online:true,agent_status:'readonly',agent:'shepherdr',workspace_label:r.space||r.title,machine_label:r.machine};}
@@ -14,6 +14,8 @@ function label(a){return linked(a.id)?.title||name(a);}
 function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
 function badge(){const list=rows();post({op:'badge',count:list?list.filter(r=>r.need||unread.has(r.agent_id)).length:agents.filter(a=>a.agent_status==='blocked'||unread.has(a.id)).length});}
+// A Shepherdr row keeps its selection when its agent starts, finishes or is replaced; the draft and any uncertain-send block move with it.
+function follow(){const r=selectedRow&&rows()?.find(r=>r.key===selectedRow);if(!r?.view_id||r.view_id===selected)return;const draft=$('prompt').value;if(uncertain.has(selected))uncertain.add(r.view_id);if(!drafts.get(r.view_id))drafts.set(r.view_id,draft);select(r.view_id);}
 function renderModes(){$('modes').hidden=!supportsShepherdr;$('mode-herdr').setAttribute('aria-pressed',String(rosterMode==='herdr'));$('mode-shepherdr').setAttribute('aria-pressed',String(rosterMode==='shepherdr'));$('roster-label').textContent=rosterMode==='shepherdr'&&supportsShepherdr?'SPACES & TASKS':'AGENTS';$('search').placeholder=rosterMode==='shepherdr'&&supportsShepherdr?'Find a space or task…':'Find an agent…';}
 function renderShepherdr(list,roster,scroll){
   const shown=list.filter(r=>`${r.title} ${r.detail} ${r.state} ${r.machine}`.toLowerCase().includes(filter));$('count').textContent=list.filter(r=>r.kind==='task').length;
@@ -32,7 +34,7 @@ function renderRoster(){
   if(!items.length)roster.append(el('p',agents.length?'No matching agents.':'No agents found. Start an agent in Herdr.','empty'));roster.scrollTop=scroll;
 }
 function select(id){
-  drafts.set(selected,$('prompt').value);selected=id;request('preferences',{selectedAgent:id});selectionEpoch++;lastRendered='';$('prompt').value=drafts.get(id)||'';
+  drafts.set(selected,$('prompt').value);selectedRow=linked(id)?.key||'';selected=id;request('preferences',{selectedAgent:id});selectionEpoch++;lastRendered='';$('prompt').value=drafts.get(id)||'';
   lastOutput=outputs.get(id)?.text||'';renderRoster();renderHeader();renderOutput();read();
 }
 function renderHeader(){
@@ -72,7 +74,7 @@ window.receive=({type,data})=>{
     if(updates.length&&!opened){const a=updates[0];request('alertPreview',{id:a.id,title:label(a)+(a.agent_status==='blocked'?' needs input':' finished')});}
     $('machines').replaceChildren(...(data.machines||[]).map(m=>{const node=el('span',undefined,'machine');node.append(el('span',undefined,'dot '+(m.online?'online':'')),document.createTextNode(`${m.label} · ${m.online?`${m.count} agents`:'offline'}`));node.title=m.error||'';return node;}));
     if(data.discoveryError)notice('Herdr setup: '+data.discoveryError);else if(rosterMode==='shepherdr'&&data.shepherdr?.error)notice('Shepherdr: '+data.shepherdr.error);
-    if(!selected&&agents.length)select(rows()?.find(r=>r.agent_id)?.agent_id||agents[0].id);renderRoster();renderHeader();badge();read();
+    follow();if(!selected&&agents.length)select(rows()?.find(r=>r.agent_id)?.agent_id||agents[0].id);renderRoster();renderHeader();badge();read();
   }else if(type==='visibility'){opened=data.open;if(opened){renderHeader();read();}}
   else if(type==='resetBaseline'){baseline=false;}
   else if(type==='select'){select(data.id);}

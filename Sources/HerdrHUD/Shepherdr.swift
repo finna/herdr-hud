@@ -73,8 +73,9 @@ final class ShepherdrClient {
             let spaces: [Row] = places.compactMap { place in
                 guard let id = place["id"] as? String, let machine = place["machine"] as? String else { return nil }
                 machineOf[id] = machine
-                let chat = place["chat"] as? String ?? ""
-                return ["id": id, "name": place["name"] as? String ?? id, "machine": names[machine] ?? machine, "home": place["home"] as? Bool ?? false, "chat": chat,
+                // Another machine's chats reach the main server only while its web app watches them: read only this Mac's.
+                let chat = place["chat"] as? String ?? "", readable = machine == host ? chat : ""
+                return ["id": id, "name": place["name"] as? String ?? id, "machine": names[machine] ?? machine, "home": place["home"] as? Bool ?? false, "chat": readable,
                         "status": place["status"] as? String ?? "", "need": asks[id] != nil || !((attention[chat] as? [Any]) ?? []).isEmpty,
                         "offline": place["unreachableSince"] != nil || place["herdrDown"] != nil,
                         "agent_id": Self.link(chat, machine: machine, host: host, records: records, agents: agents) ?? NSNull()]
@@ -83,7 +84,7 @@ final class ShepherdrClient {
                 // Shepherdr keeps when a task was archived (ms); an archived task is out of every list.
                 guard let id = task["id"] as? String, let place = task["place"] as? String, let machine = machineOf[place], ((task["archived"] as? NSNumber)?.doubleValue ?? 0) == 0 else { return nil }
                 let status = task["status"] as? String ?? "", chat = (task["agent"] as? Row)?["chat"] as? String ?? ""
-                return ["id": id, "title": task["name"] as? String ?? id, "status": status, "sub": task["sub"] as? String ?? "", "place": place, "need": status == "need", "chat": chat,
+                return ["id": id, "title": task["name"] as? String ?? id, "status": status, "sub": task["sub"] as? String ?? "", "place": place, "need": status == "need", "chat": machine == host ? chat : "",
                         "agent_id": Self.link(chat, machine: machine, host: host, records: records, agents: agents) ?? NSNull()]
             }
             let result: Row = ["spaces": spaces, "tasks": rows, "error": ""]

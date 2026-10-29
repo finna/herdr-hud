@@ -40,6 +40,7 @@ final class ShepherdrTests: XCTestCase {
         XCTAssertEqual(tasks.map { $0["agent_id"] as? String }, ["T1",nil,"R"], "a finished record links nothing")
         XCTAssertEqual(tasks[0]["need"] as? Bool, true)
         XCTAssertNil(result["settings"], "only spaces and tasks leave the Shepherdr snapshot")
+        XCTAssertEqual(spaces.map { $0["chat"] as? String }, ["p:Mac:~","p:Mac:app",""]); XCTAssertEqual(tasks.map { $0["chat"] as? String }, ["APP-1/Agent","APP-2/Agent",""])
     }
     func testNotRunningAgentReadsOnlyAListedShepherdrChat() throws {
         var asked: [String] = []
@@ -55,6 +56,7 @@ final class ShepherdrTests: XCTestCase {
         XCTAssertEqual(result["id"] as? String, "shepherdr:APP-2/Agent")
         XCTAssertEqual(asked.last, "/api/chat?chat=APP-2/Agent")
         XCTAssertThrowsError(try client.transcript("SECRET/Agent")); XCTAssertThrowsError(try client.transcript("APP-3/Agent"), "an archived task's chat is not listed")
+        XCTAssertThrowsError(try client.transcript("LAP-1/Agent"), "another machine's chat is only cached on the main server")
         XCTAssertEqual(asked.count, 2)
     }
     func testLinkRefusesWrongMachineAndAmbiguousNames() {
