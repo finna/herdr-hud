@@ -15,7 +15,7 @@ function el(tag,text,cls){const node=document.createElement(tag);if(text!==undef
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
 function badge(){const list=rows();post({op:'badge',count:list?list.filter(r=>r.need||unread.has(r.agent_id)).length:agents.filter(a=>a.agent_status==='blocked'||unread.has(a.id)).length});}
 // A Shepherdr row keeps its selection when its agent starts, finishes or is replaced; the draft and any uncertain-send block move with it.
-function follow(){const r=selectedRow&&rows()?.find(r=>r.key===selectedRow);if(!r?.view_id||r.view_id===selected)return;const draft=$('prompt').value;if(uncertain.has(selected))uncertain.add(r.view_id);if(!drafts.get(r.view_id))drafts.set(r.view_id,draft);select(r.view_id);}
+function follow(){if(!selectedRow)selectedRow=linked(selected)?.key||'';const r=selectedRow&&rows()?.find(r=>r.key===selectedRow);if(!r?.view_id||r.view_id===selected)return;if(uncertain.has(selected))uncertain.add(r.view_id);drafts.set(r.view_id,$('prompt').value);select(r.view_id);}
 function renderModes(){$('modes').hidden=!supportsShepherdr;$('mode-herdr').setAttribute('aria-pressed',String(rosterMode==='herdr'));$('mode-shepherdr').setAttribute('aria-pressed',String(rosterMode==='shepherdr'));$('roster-label').textContent=rosterMode==='shepherdr'&&supportsShepherdr?'SPACES & TASKS':'AGENTS';$('search').placeholder=rosterMode==='shepherdr'&&supportsShepherdr?'Find a space or task…':'Find an agent…';}
 function renderShepherdr(list,roster,scroll){
   const shown=list.filter(r=>`${r.title} ${r.detail} ${r.state} ${r.machine}`.toLowerCase().includes(filter));$('count').textContent=list.filter(r=>r.kind==='task').length;
@@ -105,7 +105,7 @@ $('prompt').onkeydown=e=>{
     input.dispatchEvent(new Event('input',{bubbles:true}));
   }else if(!e.repeat){send();}
 };
-for(const view of ['herdr','shepherdr'])$('mode-'+view).onclick=()=>{if(rosterMode===view)return;rosterMode=view;shepherdr=null;notice('');request('preferences',{rosterMode:view});renderModes();renderRoster();renderHeader();badge();};
+for(const view of ['herdr','shepherdr'])$('mode-'+view).onclick=()=>{if(rosterMode===view)return;rosterMode=view;shepherdr=null;selectedRow='';notice('');request('preferences',{rosterMode:view});renderModes();renderRoster();renderHeader();badge();};
 for(const view of ['chat','terminal'])$(view).onclick=()=>{mode=view;request('preferences',{mode});lastRendered='';renderOutput();};
 const divider=$('divider');divider.onpointerdown=e=>{divider.setPointerCapture(e.pointerId);};divider.onpointermove=e=>{if(divider.hasPointerCapture(e.pointerId)){document.querySelector('aside').style.width=Math.min(Math.max(e.clientX,155),innerWidth*.42)+'px';}};
 divider.onpointerup=()=>request('preferences',{rosterWidth:document.querySelector('aside').offsetWidth});

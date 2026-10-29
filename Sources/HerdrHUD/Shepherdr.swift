@@ -51,13 +51,14 @@ final class ShepherdrClient {
         return found
     }
     /// The HUD id of the one herdr agent Shepherdr runs for this chat key, or nil when none or more than one matches.
+    /// Shepherdr names another machine by its herdr label up to the first dot.
     static func link(_ chat: String?, machine: String, host: String, records: [Record], agents: [Row]) -> String? {
         guard let chat = chat, !chat.isEmpty else { return nil }
         let local = machine == host
         let matches = records.filter { $0.key == chat && (local ? $0.machine == nil : $0.machine != nil) }.flatMap { record in
             agents.filter { row in
                 row["name"] as? String == record.name &&
-                (local ? row["machine_id"] as? String == "local" : row["machine_id"] as? String == record.machine && row["machine_label"] as? String == machine)
+                (local ? row["machine_id"] as? String == "local" : row["machine_id"] as? String == record.machine && (row["machine_label"] as? String)?.components(separatedBy: ".").first == machine)
             }
         }
         return matches.count == 1 ? matches[0]["id"] as? String : nil

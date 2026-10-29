@@ -8,12 +8,12 @@ const data={spaces:[{id:'p:Mac:app',name:'app',machine:'Mac Studio',agent_id:'C'
 const agents=[agent('C','idle'),agent('B','working'),agent('N','done')];
 test('spaces lead their tasks, needs-you first and merged last',()=>{
   const rows=shepherdrRows(data,agents);
-  assert.deepEqual(rows.map(r=>r.key),['space:p:Mac:app','task:APP-1','task:APP-3','task:APP-2','space:p:Lap:~']);
+  assert.deepEqual(rows.map(r=>r.key),['space:p:Mac:app','task:p:Mac:app:APP-1','task:p:Mac:app:APP-3','task:p:Mac:app:APP-2','space:p:Lap:~']);
   assert.deepEqual(rows.map(r=>r.state),['Idle','Needs you','Working','Merged','Offline']);
   assert.equal(rows[1].title,'APP-1 · Asks');assert.equal(rows[1].need,true);assert.equal(rows[3].agent_id,'');assert.equal(rows[4].agent_id,'');
   assert.equal(rows[3].view_id,'shepherdr:APP-2/Agent','a merged task opens its Shepherdr chat');assert.equal(rows[4].view_id,'','no agent and no chat: nothing to open');
 });
-test('a row links only an agent the herdr roster has',()=>{assert.equal(shepherdrRows(data,[agent('C','idle')]).find(r=>r.key==='task:APP-3').agent_id,'');assert.deepEqual(shepherdrRows(null,agents),[]);});
+test('a row links only an agent the herdr roster has',()=>{assert.equal(shepherdrRows(data,[agent('C','idle')]).find(r=>r.key==='task:p:Mac:app:APP-3').agent_id,'');assert.deepEqual(shepherdrRows(null,agents),[]);});
 
 const source=fs.readFileSync(path.join(__dirname,'../Sources/HerdrHUD/Resources/app.js'),'utf8'),model=fs.readFileSync(path.join(__dirname,'../Sources/HerdrHUD/Resources/model.js'),'utf8');
 class Node{constructor(tag){this.tag=tag;this.children=[];this.attrs={};this.textContent='';this.value='';this.style={};this.hidden=false;this.disabled=false;}
@@ -54,6 +54,18 @@ test('a selected task follows its agent as it finishes and starts again, keeping
   assert.equal(h.$('title').textContent,'APP-3 · Busy');assert.equal(h.$('prompt').value,'keep me');assert.equal(h.$('send').disabled,true);
   h.window.receive({type:'roster',data:{agents:[agents[0],agent('B2','idle')],machines:[],shepherdr:task('B2')}});
   assert.equal(h.$('title').textContent,'APP-3 · Busy');assert.equal(h.$('prompt').value,'keep me');assert.equal(h.$('send').disabled,false);
+  h.$('prompt').value='newer';h.$('prompt').oninput();h.window.receive({type:'roster',data:{agents:[agents[0]],machines:[],shepherdr:task(null)}});
+  assert.equal(h.$('prompt').value,'newer','the latest draft moves, never an older one');
+});
+test('a restored selection follows its task too, and tasks with one id on two machines stay apart',()=>{
+  const h=harness('mac'),both=(a,b)=>({spaces:[...data.spaces,{id:'p:Far:x',name:'x',machine:'Far',agent_id:null}],tasks:[{id:'APP-3',title:'Here',status:'work',place:'p:Mac:app',agent_id:a,chat:'APP-3/Agent'},{id:'APP-3',title:'There',status:'work',place:'p:Far:x',agent_id:b,chat:''}]});
+  h.window.receive({type:'preferences',data:{shepherdrSupported:true,rosterMode:'shepherdr',selectedAgent:'R'}});
+  h.window.receive({type:'roster',data:{agents:[...agents,agent('R','idle')],machines:[],shepherdr:both('B','R')}});
+  assert.equal(h.$('title').textContent,'APP-3 · There');
+  h.window.receive({type:'roster',data:{agents:[...agents,agent('R2','idle')],machines:[],shepherdr:both('B','R2')}});
+  assert.equal(h.$('title').textContent,'APP-3 · There');
+  h.window.receive({type:'roster',data:{agents,machines:[],shepherdr:both('B',null)}});
+  assert.notEqual(h.$('title').textContent,'APP-3 · Here','never moves to the other machine\'s task');
 });
 test('switching back to Herdr mode restores the plain agent roster and saves the choice',()=>{
   const h=harness('mac');

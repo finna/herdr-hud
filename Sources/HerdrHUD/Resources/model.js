@@ -28,7 +28,7 @@
       (data.tasks||[]).filter(t=>t.place===space.id).map((t,i)=>({t,i})).sort((a,b)=>rank(a.t)-rank(b.t)||a.i-b.i).forEach(({t})=>{
         const state=t.status==='done'?t.sub||'Done':TASK_LABEL[t.status]||t.status;
         const id=byId.has(t.agent_id)?t.agent_id:'';
-        rows.push({kind:'task',key:'task:'+t.id,agent_id:id,view_id:view(id,t.chat),title:`${t.id} · ${t.title}`,detail:t.sub&&t.sub!==state?t.sub:'',space:space.name,machine:space.machine,need:t.status==='need',status:t.status,state});
+        rows.push({kind:'task',key:`task:${space.id}:${t.id}`,agent_id:id,view_id:view(id,t.chat),title:`${t.id} · ${t.title}`,detail:t.sub&&t.sub!==state?t.sub:'',space:space.name,machine:space.machine,need:t.status==='need',status:t.status,state});
       });
     }
     return rows;

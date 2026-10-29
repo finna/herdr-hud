@@ -65,6 +65,7 @@ final class ShepherdrTests: XCTestCase {
         XCTAssertNil(ShepherdrClient.link("A/Agent", machine: "Mac", host: "Mac", records: records, agents: [agent("shep-a", id:"X"), agent("shep-a", id:"Y")]), "two matches link nothing")
         XCTAssertNil(ShepherdrClient.link("B/Agent", machine: "Laptop", host: "Mac", records: records, agents: [agent("shep-b", id:"X", machine:"m1", label:"Other")]), "the herdr machine must carry the space's machine name")
         XCTAssertEqual(ShepherdrClient.link("B/Agent", machine: "Laptop", host: "Mac", records: records, agents: [agent("shep-b", id:"X", machine:"m1", label:"Laptop")]), "X")
+        XCTAssertEqual(ShepherdrClient.link("B/Agent", machine: "laptop", host: "Mac", records: records, agents: [agent("shep-b", id:"X", machine:"m1", label:"laptop.local")]), "X", "Shepherdr cuts a label at its first dot")
         XCTAssertNil(ShepherdrClient.link("C/Agent", machine: "Mac", host: "Mac", records: records, agents: [agent("shep-c", id:"X")]), "no record: no guess from names")
     }
     func testUnreachableShepherdrKeepsLastRosterWithError() throws {
