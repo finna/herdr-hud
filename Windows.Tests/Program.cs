@@ -114,7 +114,58 @@ await Test("local named-pipe prompt roundtrip", async () => {
     var serving=Serve();var data=System.Text.Encoding.UTF8.GetBytes(new JsonObject{["agent"]=Fake.Agent("idle","t1","w1","c1"),["text"]="private 🐑"}.ToJsonString());
     string response=await LocalPrompt.Send(@"\\.\pipe\"+name,data,TimeSpan.FromSeconds(4));await serving;Check(response.Contains("agent_prompted"),"No acknowledgement");
 });
+await Test("Herdr Windows socket name sends literal text with fragmented acknowledgement", () => HerdrPipePromptCheck("ok"));
+await Test("Herdr Windows socket name rejects changed terminal before sending", () => HerdrPipePromptCheck("replaced"));
+await Test("Herdr Windows socket name rejects busy agent before sending", () => HerdrPipePromptCheck("busy"));
+await Test("Herdr Windows socket name missing acknowledgement never retries", () => HerdrPipePromptCheck("missing-ack"));
+await Test("local prompt rejects relative and remote pipe paths", async () => {
+    var data=System.Text.Encoding.UTF8.GetBytes(new JsonObject{["agent"]=Fake.Agent("idle","t1","w1","c1"),["text"]="fixture"}.ToJsonString());
+    foreach(string path in new[]{"herdr.sock",@"C:herdr.sock",@"\\remote\pipe\herdr"})
+        await Refused(()=>LocalPrompt.Send(path,data,TimeSpan.FromSeconds(1)),"Unsupported local Herdr pipe path");
+});
 Console.WriteLine($"{passed} tests passed.");
+
+static async Task HerdrPipePromptCheck(string mode) {
+    string path=Path.Combine(Path.GetTempPath(),"hud-"+Guid.NewGuid().ToString("N")+".sock");
+    using var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(8));
+    int sends=0,connections=0;
+    string text="private 🐑\n'quote' $(never)";
+    async Task Serve() {
+        int expectedConnections=mode is "replaced" or "busy" ? 1 : 2;
+        for(int i=0;i<expectedConnections;i++) {
+            using var stream=new System.IO.Pipes.NamedPipeServerStream(path,System.IO.Pipes.PipeDirection.InOut,1,System.IO.Pipes.PipeTransmissionMode.Byte,System.IO.Pipes.PipeOptions.Asynchronous);
+            await stream.WaitForConnectionAsync(cancel.Token);connections++;
+            using var reader=new StreamReader(stream,System.Text.Encoding.UTF8,false,1024,true);
+            var request=JsonNode.Parse((await reader.ReadLineAsync(cancel.Token))!)!;
+            string method=request["method"]!.GetValue<string>();
+            Check(method==(i==0?"agent.get":"agent.prompt"),"Unexpected method or retry");
+            Check(request["params"]!["target"]!.GetValue<string>()=="p1","Wrong target");
+            if(method=="agent.prompt") {
+                sends++;Check(request["params"]!["text"]!.GetValue<string>()==text,"Prompt text changed");
+                if(mode=="missing-ack") return;
+            }
+            var agent=Fake.Agent(mode=="busy"?"working":"idle",mode=="replaced"?"replacement":"t1","w1","c1");
+            var reply=new JsonObject{["id"]=request["id"]!.DeepClone(),["result"]=new JsonObject{["type"]=i==0?"agent_info":"agent_prompted",["agent"]=agent}};
+            byte[] bytes=System.Text.Encoding.UTF8.GetBytes(reply.ToJsonString()+"\n");
+            foreach(byte b in bytes) await stream.WriteAsync(new byte[]{b},cancel.Token);
+            Check(await stream.ReadAsync(new byte[1],cancel.Token)==0,"Client did not close connection");
+        }
+    }
+    try {
+        var serving=Serve();
+        var data=System.Text.Encoding.UTF8.GetBytes(new JsonObject{["agent"]=Fake.Agent("idle","t1","w1","c1"),["text"]=text}.ToJsonString());
+        if(mode=="ok") {
+            string response=await LocalPrompt.Send(path,data,TimeSpan.FromSeconds(5));
+            Check(response.Contains("agent_prompted"),"Missing success acknowledgement");
+        } else {
+            string expected=mode=="replaced"?"changed":mode=="busy"?"not ready":"acknowledgement";
+            await Refused(()=>LocalPrompt.Send(path,data,TimeSpan.FromSeconds(5)),expected);
+        }
+        await serving;
+        Check(sends==(mode is "replaced" or "busy"?0:1),"Unexpected send count");
+        Check(connections==(mode is "replaced" or "busy"?1:2),"Unexpected connection count");
+    } finally { cancel.Cancel(); }
+}
 
 sealed class Fake
 {
