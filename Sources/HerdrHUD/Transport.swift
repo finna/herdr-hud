@@ -125,3 +125,114 @@ enum LocalPrompt {
         return encode(["result":result])
     }
 }
+
+/// A JSON-RPC 2.0 error answer from `hc connect`: the core understood the request and refused it.
+struct CoreRPCError: LocalizedError {
+    let code: Int, kind: String, message: String
+    var errorDescription: String? { message }
+}
+/// One open conversation with a Herdr core: requests go out one at a time, each answered by its own reply line.
+protocol CoreChannel: AnyObject {
+    func call(_ method: String, _ params: Row, timeout: TimeInterval) throws -> Any
+    func close()
+}
+/// One `hc connect` child speaking newline-delimited JSON-RPC 2.0 over its stdin and stdout. Request bodies, prompts
+/// included, travel only through the pipe and never appear in argv. The child runs in its own process group, which is
+/// killed when the channel closes. `HERDR_*` and `HC_*` variables are removed so a HUD started from inside a Herdr
+/// terminal neither speaks as that terminal nor reaches another session.
+final class RPCPipe: CoreChannel {
+    let pid: pid_t
+    private let inFD: Int32, outFD: Int32, errFD: Int32
+    private var buffer = Data(), errors = 0, nextID = 1, open = true
+    /// False once the child's stderr reached end of file: macOS poll() keeps reporting POLLHUP on a closed pipe,
+    /// so a closed stderr must leave the poll set or the wait for a reply becomes a busy loop.
+    private(set) var errOpen = true
+    init(executable: String, arguments: [String]) throws {
+        var fds: [Int32] = [0, 0, 0, 0, 0, 0]
+        for i in 0..<3 {
+            guard fds.withUnsafeMutableBufferPointer({ pipe($0.baseAddress! + i * 2) }) == 0 else {
+                for fd in fds where fd > 0 { Darwin.close(fd) }
+                throw HUDError("Could not open a pipe to Herdr.")
+            }
+        }
+        for fd in fds { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }
+        var actions: posix_spawn_file_actions_t?, attr: posix_spawnattr_t?
+        posix_spawn_file_actions_init(&actions); posix_spawnattr_init(&attr)
+        defer { posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attr) }
+        posix_spawn_file_actions_adddup2(&actions, fds[0], 0)
+        posix_spawn_file_actions_adddup2(&actions, fds[3], 1)
+        posix_spawn_file_actions_adddup2(&actions, fds[5], 2)
+        posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETPGROUP)); posix_spawnattr_setpgroup(&attr, 0)
+        var env = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("HERDR_") && !$0.key.hasPrefix("HC_") }
+        env["PATH"] = NSHomeDirectory() + "/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let av = ([executable] + arguments).map { strdup($0) } + [nil]
+        let ev = env.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer { for p in av + ev { if let p = p { free(p) } } }
+        var child: pid_t = 0
+        let code = av.withUnsafeBufferPointer { a in ev.withUnsafeBufferPointer { e in
+            posix_spawn(&child, executable, &actions, &attr, UnsafeMutablePointer(mutating: a.baseAddress!), UnsafeMutablePointer(mutating: e.baseAddress!)) } }
+        Darwin.close(fds[0]); Darwin.close(fds[3]); Darwin.close(fds[5])
+        guard code == 0 else { Darwin.close(fds[1]); Darwin.close(fds[2]); Darwin.close(fds[4]); throw HUDError("Could not launch Herdr core (\(code)).") }
+        pid = child; inFD = fds[1]; outFD = fds[2]; errFD = fds[4]
+        signal(SIGPIPE, SIG_IGN)
+        for fd in [inFD, outFD, errFD] { _ = fcntl(fd, F_SETFL, O_NONBLOCK) }
+    }
+    deinit { close() }
+    func close() {
+        guard open else { return }; open = false
+        Darwin.close(inFD); Darwin.close(outFD); Darwin.close(errFD)
+        _ = kill(-pid, SIGKILL)
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+    }
+    /// Sends one request and waits for the reply carrying its id. Lines without that id (notifications) are skipped.
+    func call(_ method: String, _ params: Row, timeout: TimeInterval) throws -> Any {
+        guard open else { throw HUDError("Herdr core connection is closed.") }
+        let id = nextID; nextID += 1
+        var wire = Data((encode(["jsonrpc": "2.0", "id": id, "method": method, "params": params]) + "\n").utf8)
+        guard wire.count <= 524_288 else { throw HUDError("Input limit exceeded.") }
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let line = takeLine() {
+                guard let reply = try? JSONSerialization.jsonObject(with: line) as? Row else { throw HUDError("Herdr core sent an unreadable reply.") }
+                guard (reply["id"] as? NSNumber)?.intValue == id else { continue }
+                if let error = reply["error"] as? Row {
+                    throw CoreRPCError(code: (error["code"] as? NSNumber)?.intValue ?? 0, kind: (error["data"] as? Row)?["kind"] as? String ?? "", message: error["message"] as? String ?? "Herdr core refused the request.")
+                }
+                guard let result = reply["result"] else { throw HUDError("Herdr core sent a reply without a result.") }
+                return result
+            }
+            let ms = deadline.timeIntervalSinceNow * 1000
+            guard ms > 0 else { throw HUDError("Herdr core timed out.") }
+            var fds = [pollfd(fd: outFD, events: Int16(POLLIN), revents: 0), pollfd(fd: errOpen ? errFD : -1, events: Int16(POLLIN), revents: 0),
+                       pollfd(fd: wire.isEmpty ? -1 : inFD, events: Int16(POLLOUT), revents: 0)]
+            if poll(&fds, 3, Int32(min(ms, 200))) < 0 && errno != EINTR { throw HUDError("Herdr core connection failed.") }
+            if !wire.isEmpty && fds[2].revents != 0 {
+                let n = wire.withUnsafeBytes { Darwin.write(inFD, $0.baseAddress!, min(16384, wire.count)) }
+                if n > 0 { wire.removeFirst(n) } else if errno != EAGAIN && errno != EINTR { throw HUDError("Herdr core closed its input.") }
+            }
+            if errOpen && fds[1].revents != 0 {  // drain stderr so the child never blocks on it; its text is not used
+                var chunk = [UInt8](repeating: 0, count: 4096)
+                let n = Darwin.read(errFD, &chunk, chunk.count)
+                if n > 0 { errors += n; guard errors <= ProcessRunner.stderrLimit else { throw HUDError("Herdr core error output limit exceeded.") } }
+                else if n == 0 || (errno != EAGAIN && errno != EINTR) { errOpen = false }
+            }
+            if fds[0].revents != 0 {
+                var chunk = [UInt8](repeating: 0, count: 16384)
+                let n = Darwin.read(outFD, &chunk, chunk.count)
+                if n == 0 { throw HUDError("Herdr core closed the connection.") }
+                if n > 0 {
+                    guard buffer.count + n <= ProcessRunner.stdoutLimit else { throw HUDError("Herdr core output limit exceeded.") }
+                    buffer.append(contentsOf: chunk.prefix(n))
+                } else if errno != EAGAIN && errno != EINTR { throw HUDError("Could not read Herdr core output.") }
+            }
+        }
+    }
+    private func takeLine() -> Data? {
+        while let end = buffer.firstIndex(of: 10) {
+            let line = buffer[buffer.startIndex..<end]; buffer.removeSubrange(buffer.startIndex...end)
+            if !line.allSatisfy({ $0 == 32 || $0 == 13 || $0 == 9 }) { return Data(line) }
+        }
+        return nil
+    }
+}

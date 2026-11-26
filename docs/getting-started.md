@@ -78,8 +78,10 @@ Open a new terminal after installing, then check:
 herdr --version
 ```
 
-The HUD requires Herdr 0.9 or newer. Already have Herdr working? Keep that setup
-and proceed to your agent; you do not need another installation.
+The HUD supports **Herdr Desktop** (`hc` / `herdr-core`) on Mac, and **Herdr 0.9 or
+newer** (`herdr` TUI) on Mac, Linux, and Windows. Already have Herdr Desktop or
+Herdr TUI working? Keep that setup and proceed to your agent; you do not need
+another installation.
 
 ### 2. Start your agent inside Herdr
 
@@ -123,7 +125,7 @@ network while you want to use it remotely. See [Herdr persistence](https://herdr
 1. [Download the Mac DMG](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-macOS-arm64.dmg). This build requires an Apple Silicon Mac and macOS 13 or newer.
 2. Open it and drag **Herdr HUD.app** onto the **Applications** folder shown inside.
 3. Eject the disk image, then open **Herdr HUD** from Applications. The current download is signed and notarized by Apple; you may see the normal internet-download confirmation.
-4. Click the floating **H**. Agents in this Mac's default Herdr session should appear. Enabled saved remote machines are discovered automatically.
+4. Click the floating **H**. Agents running in **Herdr Desktop** (`hc`) or in this Mac's `default` Herdr TUI session appear automatically, along with connected or enabled saved remote machines. Use **Herdr backend** in the menu-bar H if both are installed and you want to pin one.
 
 There is no URL, API key, or SSH-source form to fill out on Mac. If your agents
 only run elsewhere, keep a local default Herdr session on the Mac and follow
@@ -328,7 +330,7 @@ assuming every game behaves the same way.
 
 | What you see | What to check |
 | --- | --- |
-| H opens, but no agents appear | Start the agent **inside Herdr**. On its host, in a separate terminal, run `herdr --session default agent list`. Use the configured session name if different. Check the same OS account is running Herdr and being used by the HUD/SSH. |
+| H opens, but no agents appear | Start the agent **inside Herdr**. On Mac with Herdr Desktop, check `hc ls` (and verify the program reports agent status, or check **Herdr backend** in the menu-bar H). With Herdr TUI, run `herdr --session default agent list` (or your configured session name). Check the same OS account is running Herdr and being used by the HUD/SSH. |
 | Only some machines appear | Run `herdr machine list` on the Mac/source. Check profiles are enabled and point at the right sessions. Add missing machines there; discovery is one level deep. |
 | Connection refused or timed out | Check the host is awake, Remote Login/OpenSSH server is enabled, and its address is reachable. If using Tailscale, both devices need to be connected and network policy must allow SSH. |
 | Permission denied or a password prompt | Repeat the batch SSH test above from the correct initiating computer. Check remote username, public-key installation, and the SSH agent available to the HUD. |

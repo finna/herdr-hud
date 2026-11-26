@@ -62,10 +62,11 @@ Settings locations are documented below.
 
 ## Run on macOS
 
-Requires macOS 13+, Herdr 0.9+ installed with an existing running default session,
-and existing SSH authentication for any saved remote machines. No account,
-model API key, Python runtime, Node runtime, or hosted service is required to
-run the packaged app. Xcode command-line tools are needed to build from source.
+Requires macOS 13+, either Herdr Desktop (`hc` / `herdr-core`) or Herdr 0.9+
+(`herdr` with an existing running default session), and existing SSH authentication
+for any saved remote machines. No account, model API key, Python runtime, Node
+runtime, or hosted service is required to run the packaged app. Xcode command-line
+tools are needed to build from source.
 
 - Click **H** to open or close the agents. Drag H to reposition it.
 - **Command–Option–H:** toggle the agent panel.
@@ -73,8 +74,9 @@ run the packaged app. Xcode command-line tools are needed to build from source.
 - **Escape:** close the panel while keeping H visible.
 - **Enter:** send a prompt to the selected ready agent.
 - **Control–Enter or Shift–Enter:** insert a new line (Command/Option–Enter also insert a new line).
-- The **H menu-bar item** has visibility, alternative shortcuts, launch-at-login,
-  refresh, and quit controls. Login startup is off by default and remains unverified.
+- The **H menu-bar item** has visibility, alternative shortcuts, Herdr backend
+  selection, launch-at-login, refresh, and quit controls. Login startup is off by
+  default and remains unverified.
 - Drag the roster divider to resize it. Visibility, position, view, and divider
   width are remembered. Prompt drafts are kept per agent while the app runs.
 - Agents needing attention sort first, then working agents, then read idle agents.
@@ -122,7 +124,19 @@ test, not an exclusive-fullscreen game test. Do not run it during active gamepla
 For commands and examples, see [connecting the HUD](docs/getting-started.md#install-and-connect-the-hud)
 and [adding more computers](docs/getting-started.md#add-more-computers).
 
-The app reads `herdr machine list --json` from your existing installation. It
+On macOS, **Automatic** mode connects to **Herdr Desktop / `herdr-core`** (`hc connect`)
+when `hc` is installed and has live agents (or when the `herdr` CLI is not installed),
+and otherwise uses **Herdr 0.9+** (`herdr`). You can also pin **Automatic**,
+**Herdr Desktop / Core (hc)**, or **Herdr TUI (herdr)** under **Herdr backend** in the
+menu-bar H. In `hc` mode, the HUD reads `hello`, `terminal.list`, and the `herdr-app`
+layout document over `hc connect`, so Space and Tab names resolve even while the Herdr
+Desktop window is closed, and connected remote cores (`machine/t7`) appear without
+separate SSH or Python helpers. Sends verify the live terminal (`address`,
+`created_ms`), program, Space, and `idle`/`done` readiness via `terminal.get` before
+submitting `terminal.send` (`if: "idle"` when idle). Windows uses the `herdr` 0.9+
+CLI/SSH transport below.
+
+In `herdr` 0.9+ mode, the app reads `herdr machine list --json` from your existing installation. It
 lists the local default session and enabled saved SSH machines, respecting each
 remote profile's named session. It does not enroll machines, create teams,
 restart Herdr, or install/update anything on remote computers. Machine discovery
@@ -180,12 +194,15 @@ app does not have this mode yet; its switch stays hidden.
 ## Prompt privacy and output limits
 
 Prompt text never appears in process arguments or SSH command strings. It travels
-over stdin across each SSH hop, then through Herdr's local socket API. The native
+over stdin across each SSH hop, then through Herdr's local socket API (or over
+`hc connect` stdin/stdout in Mac `herdr-core` mode). The native
 hosts and remote helper recheck the expected agent and validate acknowledgements.
 Unknown delivery is never retried automatically.
 
 Native command output is streamed with a 1 MiB stdout and 64 KiB stderr limit,
-with 12-second Mac / 15-second Windows deadlines. Mac commands start in their own
+with 12-second Mac / 15-second Windows deadlines (and up to 75 seconds on the
+Mac `herdr-core` send turn to accommodate `hc`'s 60-second `draft_wait` hold).
+Mac commands start in their own
 process group; Windows commands are created suspended, assigned to a kill-on-close
 Job Object, then resumed. Timeout or overflow terminates the owned group/job,
 including descendants. The remote helper caps socket replies at 1 MiB and status
@@ -195,7 +212,8 @@ output at 64 KiB, and has a 12-second deadline. Prompts are limited to 60 KB.
 
 - `Sources/HerdrHUD/App.swift`: AppKit nonactivating panels, fullscreen Spaces,
   menu-bar controls, Carbon shortcuts, monitor positioning, and WebKit bridge.
-- `Sources/HerdrHUD/Transport.swift`: bounded process groups and native socket prompts.
+- `Sources/HerdrHUD/Transport.swift`: bounded process groups, `hc connect` JSON-RPC pipes, and native socket prompts.
+- `Sources/HerdrHUD/HerdrCore.swift`: `herdr-core` (`hc connect`) roster, `herdr-app` layout mapping, checked prompts, and backend router.
 - `Sources/HerdrHUD/Herdr.swift`: saved machine
   discovery, cached roster, fresh identity/readiness checks, literal SSH quoting.
 - `Sources/HerdrHUD/Resources/`: reusable UI and transcript/attention logic.
@@ -271,7 +289,7 @@ With the app running:
 ```
 
 The executable also supports `--close`, `--show`, `--hide`, `--toggle`,
-`--roster` (read-only live JSON), `--inspect`, and `--snapshot` (own panel only).
+`--roster` (read-only live JSON, with optional `--backend auto|core|tui`), `--inspect`, and `--snapshot` (own panel only).
 `--verify-ui` checks live local/remote reads, draft retention, view switching,
 search, text safety, and layout without sending prompts. It requires both hosts.
 
