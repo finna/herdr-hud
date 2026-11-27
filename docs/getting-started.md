@@ -58,12 +58,14 @@ view a remote source needs the HUD and SSH client, but does not need local Herdr
 
 ### 1. Install Herdr
 
-Already have **Herdr Desktop** or **Herdr TUI** working? Keep that setup and proceed
-to [step 2](#2-start-your-agent-inside-herdr); you do not need another installation.
+Already have **Herdr TUI** working, or **Herdr Desktop** working for the **Mac HUD**?
+Keep that setup and proceed to [step 2](#2-start-your-agent-inside-herdr); you do not
+need another installation. If you use the **Windows HUD** connected to an SSH source
+host, that source host requires **Herdr TUI 0.9+** and agents running in that TUI setup.
 
-- **Herdr Desktop (macOS only):** Download and install the desktop app from
+- **Herdr Desktop (Mac HUD only):** Download and install the desktop app from
   [herdr.dev](https://herdr.dev/), then open it once so `herdr-core` (`hc`) is set up.
-- **Herdr TUI 0.9+ (macOS, Linux, or Windows):**
+- **Herdr TUI 0.9+ (macOS, Linux, Windows, and all Windows HUD SSH sources):**
   On **macOS or Linux**, open Terminal and run:
 
   ```sh
@@ -86,7 +88,7 @@ instructions. Herdr's [agent documentation](https://herdr.dev/docs/agents/) list
 supported agents and integrations. An agent started in an unrelated terminal
 outside Herdr is not automatically imported.
 
-**If you use Herdr Desktop (Mac):**
+**If you use Herdr Desktop (Mac HUD only):**
 
 1. Open **Herdr** (`Herdr.app`), create or select a Space for your project folder, and start an agent (`claude`, `codex`, `pi`, etc.) from the **+** tab menu or inside a tab's terminal (or via `hc run --bg`).
 2. Complete any login or project-trust prompt in that tab. Once the agent reports its status, it appears in Herdr's Agents sidebar and in the HUD.
@@ -116,7 +118,7 @@ both keys, then **C**. See the [Herdr quick start](https://herdr.dev/docs/quick-
 
 ### 3. Leave the agents available
 
-- **Herdr Desktop (Mac):** You can minimize or close the Herdr Desktop window at any time; `herdr-core` keeps your terminals and agents running in the background until you exit the agents or stop the core.
+- **Herdr Desktop (Mac HUD only):** You can minimize or close the Herdr Desktop window at any time; `herdr-core` keeps your terminals and agents running in the background until you exit the agents or stop the core.
 - **Herdr TUI (`herdr`):** Use **Ctrl+B**, release, then **Q** to detach. Running `herdr` again reconnects to the session. Detaching leaves the background TUI server and agents running; stopping the server stops its panes.
 
 Keep the host powered on, awake, and connected to the network while you want to use it remotely. See [Herdr persistence](https://herdr.dev/docs/persistence-remote/).
