@@ -36,15 +36,15 @@ final class BubbleView: NSView {
     override func rightMouseDown(with event: NSEvent) { if let menu = app?.status.menu { NSMenu.popUpContextMenu(menu,with:event,for:self) } }
 }
 final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
-    let client = HerdrClient(), shepherdr = ShepherdrClient(), work = DispatchQueue(label:"herdr-hud.transport",qos:.userInitiated)
+    let client = BackendRouter(), shepherdr = ShepherdrClient(), work = DispatchQueue(label:"herdr-hud.transport",qos:.userInitiated)
     let defaults = UserDefaults.standard
     var bubble: NSPanel!, panel: OverlayPanel!, bubbleView: BubbleView!, web: WKWebView!, status: NSStatusItem!
     var timer: Timer?, hotkeys: [EventHotKeyRef] = [], handler: EventHandlerRef?
-    var visible = true, panelOpen = false, ready = false, polling = false
+    var visible = true, panelOpen = false, ready = false, polling = false, refreshQueued = false, backendEpoch = 0
     var lastSnapshot: Row = [:], readBusy = false, selected = ""
     var promptIDs = Set<String>(), hotkeyWarning = ""
     var toast: NSPanel?, toastTimer: Timer?, toastHover = false
-    var shortcuts: [NSMenuItem] = []
+    var shortcuts: [NSMenuItem] = [], backends: [NSMenuItem] = []
     static let channel = Notification.Name("org.herdr.community.hud.control")
     var support: URL { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Herdr HUD") }
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -100,11 +100,32 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
             let item = menuItem(title,#selector(changeShortcut(_:))); item.tag = index; shortcuts.append(item); submenu.addItem(item)
         }
         root.submenu = submenu; menu.addItem(root)
+        let backend = NSMenuItem(title:"Herdr backend",action:nil,keyEquivalent:""), choices = NSMenu()
+        for (mode,title) in [(BackendRouter.Mode.auto,"Automatic"),(.core,"Herdr Desktop / Core (hc)"),(.tui,"Herdr TUI (herdr)")] {
+            let item = menuItem(title,#selector(changeBackend(_:))); item.representedObject = mode.rawValue; item.state = client.mode == mode ? .on : .off; backends.append(item); choices.addItem(item)
+        }
+        backend.submenu = choices; menu.addItem(backend)
         let login = menuItem("Launch at login",#selector(toggleLogin(_:))); login.state = SMAppService.mainApp.status == .enabled ? .on : .off; menu.addItem(login)
         menu.addItem(menuItem("Refresh agents",#selector(refresh)))
         menu.addItem(menuItem("About Herdr HUD",#selector(about)))
         menu.addItem(.separator()); menu.addItem(menuItem("Quit Herdr HUD",#selector(quit)))
         status.menu = menu
+    }
+    @objc func changeBackend(_ item: NSMenuItem) {
+        guard let mode = item.representedObject as? String, let target = BackendRouter.Mode(rawValue:mode) else { return }
+        defaults.set(mode,forKey:"backendMode"); for choice in backends { choice.state = choice.representedObject as? String == mode ? .on : .off }
+        // The other backend's ids never match the new roster: start alerts from scratch and drop a selection that
+        // can no longer resolve. A poll already running belongs to the old backend; its roster is discarded.
+        backendEpoch += 1; emit("resetBaseline",[:])
+        let id = savedSelection()
+        if !id.isEmpty, !BackendRouter.selectionSurvives(id,after:target) { defaults.removeObject(forKey:"selectedAgent"); selected = ""; emit("select",["id":""]) }
+        refresh()
+    }
+    func savedSelection() -> String {
+        let raw = defaults.string(forKey:"selectedAgent") ?? ""
+        let migrated = BackendRouter.migrateSelection(raw)
+        if migrated != raw { defaults.set(migrated,forKey:"selectedAgent") }
+        return migrated
     }
     @objc func changeShortcut(_ item: NSMenuItem) { defaults.set(item.tag,forKey:"shortcutMode"); registerHotkeys() }
     func registerHotkeys() {
@@ -179,10 +200,14 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     @objc func spaceChanged() { if visible { bubble.orderFrontRegardless(); if panelOpen { panel.orderFrontRegardless() }; toast?.orderFrontRegardless() } }
     var rosterMode: String { defaults.string(forKey:"rosterMode") == "shepherdr" ? "shepherdr" : "herdr" }
     @objc func refresh() {
-        guard visible, !polling else { return }; polling = true
-        let mode = rosterMode
+        guard visible else { return }
+        guard !polling else { refreshQueued = true; return }  // run once more when the current poll ends
+        polling = true; refreshQueued = false
+        let mode = rosterMode, epoch = backendEpoch
         work.async { var data = self.client.snapshot(); if mode == "shepherdr" { data["shepherdr"] = self.shepherdr.overlay(agents:data["agents"] as? [Row] ?? []) }; DispatchQueue.main.async {
-            self.polling = false; self.lastSnapshot = data; if self.visible { self.emit("roster",data) }; self.diagnostics()
+            self.polling = false
+            if epoch == self.backendEpoch { self.lastSnapshot = data; if self.visible { self.emit("roster",data) }; self.diagnostics() }
+            if self.refreshQueued || epoch != self.backendEpoch { self.refresh() }
         } }
     }
     func emit(_ type: String, _ data: Row) { guard ready else { return }; web.evaluateJavaScript("window.receive(" + encode(["type":type,"data":data]) + ")",completionHandler:nil) }
@@ -190,7 +215,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         guard message.frameInfo.isMainFrame, let data = message.body as? Row, let operation = data["op"] as? String else { return }
         let requestID = data["requestID"] as? String ?? ""
         switch operation {
-        case "ready": ready = true; emit("preferences",["selectedAgent":defaults.string(forKey:"selectedAgent") ?? "","rosterWidth":defaults.double(forKey:"rosterWidth"),"mode":defaults.string(forKey:"viewMode") ?? "chat","rosterMode":rosterMode,"shepherdrSupported":true]); emit("visibility",["open":panelOpen]); if !lastSnapshot.isEmpty { emit("roster",lastSnapshot) }; if !hotkeyWarning.isEmpty { emit("notice",["message":hotkeyWarning]) }
+        case "ready": ready = true; emit("preferences",["selectedAgent":savedSelection(),"rosterWidth":defaults.double(forKey:"rosterWidth"),"mode":defaults.string(forKey:"viewMode") ?? "chat","rosterMode":rosterMode,"shepherdrSupported":true]); emit("visibility",["open":panelOpen]); if !lastSnapshot.isEmpty { emit("roster",lastSnapshot) }; if !hotkeyWarning.isEmpty { emit("notice",["message":hotkeyWarning]) }
         case "close": closePanel()
         case "hide": if visible { toggleVisibility() }
         case "refresh": refresh()
@@ -257,7 +282,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         case "show": if !visible { toggleVisibility() }
         case "preview-alert":
             let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
-            showToast(["id":defaults.string(forKey:"selectedAgent") ?? "","title":"Notification preview","preview":"Notifications follow H and stay clear of the button."])
+            showToast(["id":savedSelection(),"title":"Notification preview","preview":"Notifications follow H and stay clear of the button."])
             DispatchQueue.main.asyncAfter(deadline:.now()+0.25) {
                 guard let toast = self.toast else { return }
                 let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly,kCGNullWindowID) as? [Row] ?? []

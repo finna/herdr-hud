@@ -1,6 +1,7 @@
 import AppKit
 if CommandLine.arguments.contains("--roster") {
-    var roster = HerdrClient().snapshot()
+    let arguments = CommandLine.arguments, choice = arguments.firstIndex(of:"--backend").flatMap { arguments.indices.contains($0+1) ? BackendRouter.Mode(rawValue:arguments[$0+1]) : nil }
+    var roster = BackendRouter(mode:choice).snapshot()
     if CommandLine.arguments.contains("--shepherdr") { roster["shepherdr"] = ShepherdrClient().overlay(agents:roster["agents"] as? [Row] ?? []) }
     print(encode(roster))
 } else if let command = CommandLine.arguments.dropFirst().first, ["--open","--close","--toggle","--hide","--show","--snapshot","--inspect","--verify-ui","--preview-alert"].contains(command) {

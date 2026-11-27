@@ -58,34 +58,42 @@ view a remote source needs the HUD and SSH client, but does not need local Herdr
 
 ### 1. Install Herdr
 
-On **macOS or Linux**, open Terminal and run:
+Already have **Herdr TUI** working, or **Herdr Desktop** working for the **Mac HUD**?
+Keep that setup and proceed to [step 2](#2-start-your-agent-inside-herdr); you do not
+need another installation. If you use the **Windows HUD** connected to an SSH source
+host, that source host requires **Herdr TUI 0.9+** and agents running in that TUI setup.
 
-```sh
-curl -fsSL https://herdr.dev/install.sh | sh
-```
+- **Herdr Desktop (Mac HUD only):** Download and install the desktop app from
+  [herdr.dev](https://herdr.dev/), then open it once so `herdr-core` (`hc`) is set up.
+- **Herdr TUI 0.9+ (macOS, Linux, Windows, and all Windows HUD SSH sources):**
+  On **macOS or Linux**, open Terminal and run:
 
-On **Windows**, open PowerShell and run:
+  ```sh
+  curl -fsSL https://herdr.dev/install.sh | sh
+  ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
-```
+  On **Windows**, open PowerShell and run:
 
-These are Herdr's official stable installers. For package-manager options or an
-alternative if Windows blocks the installer, use the [Herdr installation guide](https://herdr.dev/docs/install/).
-Open a new terminal after installing, then check:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
+  ```
 
-```sh
-herdr --version
-```
-
-The HUD requires Herdr 0.9 or newer. Already have Herdr working? Keep that setup
-and proceed to your agent; you do not need another installation.
+  These are Herdr TUI's official stable installers (see the [Herdr TUI installation guide](https://herdr.dev/docs/install/)
+  for package-manager options). Open a new terminal after installing, then check `herdr --version` (0.9 or newer).
 
 ### 2. Start your agent inside Herdr
 
 Install and sign in to your preferred coding agent first, following its own
 instructions. Herdr's [agent documentation](https://herdr.dev/docs/agents/) lists
-supported agents and integrations.
+supported agents and integrations. An agent started in an unrelated terminal
+outside Herdr is not automatically imported.
+
+**If you use Herdr Desktop (Mac HUD only):**
+
+1. Open **Herdr** (`Herdr.app`), create or select a Space for your project folder, and start an agent (`claude`, `codex`, `pi`, etc.) from the **+** tab menu or inside a tab's terminal (or via `hc run --bg`).
+2. Complete any login or project-trust prompt in that tab. Once the agent reports its status, it appears in Herdr's Agents sidebar and in the HUD.
+
+**If you use Herdr TUI (`herdr`):**
 
 Open a terminal in the project folder you want the agent to work on, then run:
 
@@ -93,7 +101,7 @@ Open a terminal in the project folder you want the agent to work on, then run:
 herdr
 ```
 
-This opens the default Herdr session. **Inside its pane**, start your installed
+This opens the default Herdr TUI session. **Inside its pane**, start your installed
 agent, for example:
 
 ```sh
@@ -102,19 +110,18 @@ claude
 
 Or run `codex`, `pi`, or `opencode` if that is what you use. Run one agent command,
 then finish any login or project-trust prompts there. It should appear in Herdr's
-agent sidebar. An agent started in an unrelated terminal is not automatically
-moved into Herdr.
+agent sidebar.
 
-To run another agent, right-click in Herdr to create a tab or split a pane, then
-start it there. The default keyboard shortcut for a new tab is **Ctrl+B**, release
+To run another agent in Herdr TUI, right-click to create a tab or split a pane, then
+start it there. The default TUI shortcut for a new tab is **Ctrl+B**, release
 both keys, then **C**. See the [Herdr quick start](https://herdr.dev/docs/quick-start/).
 
 ### 3. Leave the agents available
 
-Use **Ctrl+B**, release, then **Q** to detach. Running `herdr` again reconnects to
-the session. Detaching leaves the background server and agents running; stopping
-the server stops its panes. Keep the host powered on, awake, and connected to the
-network while you want to use it remotely. See [Herdr persistence](https://herdr.dev/docs/persistence-remote/).
+- **Herdr Desktop (Mac HUD only):** You can minimize or close the Herdr Desktop window at any time; `herdr-core` keeps your terminals and agents running in the background until you exit the agents or stop the core.
+- **Herdr TUI (`herdr`):** Use **Ctrl+B**, release, then **Q** to detach. Running `herdr` again reconnects to the session. Detaching leaves the background TUI server and agents running; stopping the server stops its panes.
+
+Keep the host powered on, awake, and connected to the network while you want to use it remotely. See [Herdr persistence](https://herdr.dev/docs/persistence-remote/).
 
 ## Install and connect the HUD
 
@@ -123,7 +130,7 @@ network while you want to use it remotely. See [Herdr persistence](https://herdr
 1. [Download the Mac DMG](https://github.com/finna/herdr-hud/releases/download/v0.1.0-alpha.1/Herdr-HUD-macOS-arm64.dmg). This build requires an Apple Silicon Mac and macOS 13 or newer.
 2. Open it and drag **Herdr HUD.app** onto the **Applications** folder shown inside.
 3. Eject the disk image, then open **Herdr HUD** from Applications. The current download is signed and notarized by Apple; you may see the normal internet-download confirmation.
-4. Click the floating **H**. Agents in this Mac's default Herdr session should appear. Enabled saved remote machines are discovered automatically.
+4. Click the floating **H**. Agents running in **Herdr Desktop** (`hc`) or in this Mac's `default` Herdr TUI session appear automatically, along with connected or enabled saved remote machines. Use **Herdr backend** in the menu-bar H if both are installed and you want to pin one.
 
 There is no URL, API key, or SSH-source form to fill out on Mac. If your agents
 only run elsewhere, keep a local default Herdr session on the Mac and follow
@@ -328,7 +335,7 @@ assuming every game behaves the same way.
 
 | What you see | What to check |
 | --- | --- |
-| H opens, but no agents appear | Start the agent **inside Herdr**. On its host, in a separate terminal, run `herdr --session default agent list`. Use the configured session name if different. Check the same OS account is running Herdr and being used by the HUD/SSH. |
+| H opens, but no agents appear | Start the agent **inside Herdr**. On Mac with Herdr Desktop, check `hc ls` (and verify the program reports agent status, or check **Herdr backend** in the menu-bar H). With Herdr TUI, run `herdr --session default agent list` (or your configured session name). Check the same OS account is running Herdr and being used by the HUD/SSH. |
 | Only some machines appear | Run `herdr machine list` on the Mac/source. Check profiles are enabled and point at the right sessions. Add missing machines there; discovery is one level deep. |
 | Connection refused or timed out | Check the host is awake, Remote Login/OpenSSH server is enabled, and its address is reachable. If using Tailscale, both devices need to be connected and network policy must allow SSH. |
 | Permission denied or a password prompt | Repeat the batch SSH test above from the correct initiating computer. Check remote username, public-key installation, and the SSH agent available to the HUD. |
