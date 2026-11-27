@@ -79,10 +79,10 @@ final class CoreHerdrClient: HUDBackend {
     /// `created_ms` as an exact decimal string, so the replacement check never goes through floating point.
     static func created(_ t: Row) -> String { (t["created_ms"] as? NSNumber)?.stringValue ?? "" }
     static func workspaceKey(_ t: Row) -> String { text((t["labels"] as? Row)?["herdr.space"]) ?? (t["cwd"] as? String ?? "") }
-    /// The HUD id. It never contains `turn` or status: the same terminal keeps one id across every turn,
-    /// which alerts rely on, and a replacement terminal (new creation time) always gets a new one.
+    /// The HUD id. It uses a `core:` prefix that cannot collide with TUI JSON-array keys (even for a TUI machine
+    /// whose id is `"core"`), and never contains `turn` or status so alerts fire across turns.
     static func identity(machine: String, address: String, created: String, provider: String) -> String {
-        encode(["core", machine, address, created, provider])
+        "core:" + encode([machine, address, created, provider])
     }
     static func folderLabel(_ path: String?, home: String) -> String? {
         guard let path = text(path) else { return nil }
@@ -232,12 +232,25 @@ final class BackendRouter: HUDBackend {
         self.core = core; self.tui = tui; self.defaults = defaults; forced = mode
     }
     var mode: Mode { forced ?? Mode(rawValue: defaults.string(forKey: "backendMode") ?? "") ?? .auto }
-    static func isCore(_ id: String) -> Bool { id.hasPrefix("[\"core\",") }
+    static func isCore(_ id: String) -> Bool { id.hasPrefix("core:") }
+    /// Upgrades a pre-prefix 5-element Core key `["core", machine, address, created, provider]` to `core:[...]`,
+    /// leaving 6-element TUI keys (including a TUI saved machine whose id is literally `"core"`) untouched.
+    static func migrateSelection(_ id: String) -> String {
+        guard id.hasPrefix("[\"core\","), let data = id.data(using: .utf8),
+              let array = try? JSONSerialization.jsonObject(with: data) as? [Any],
+              array.count == 5, array[0] as? String == "core", array.dropFirst().allSatisfy({ $0 is String })
+        else { return id }
+        return "core:" + encode(Array(array.dropFirst()))
+    }
+    static func hasOnlineAgent(_ roster: Row) -> Bool {
+        (roster["agents"] as? [Row] ?? []).contains { $0["online"] as? Bool == true }
+    }
     /// Whether a saved selection can still name an agent after the user picks `mode`. Shepherdr views and Automatic
     /// (which may land on either backend) keep it; an explicit backend drops the other backend's ids.
     static func selectionSurvives(_ id: String, after mode: Mode) -> Bool {
-        if id.isEmpty || id.hasPrefix("shepherdr:") { return true }
-        switch mode { case .auto: return true; case .core: return isCore(id); case .tui: return !isCore(id) }
+        let current = migrateSelection(id)
+        if current.isEmpty || current.hasPrefix("shepherdr:") { return true }
+        switch mode { case .auto: return true; case .core: return isCore(current); case .tui: return !isCore(current) }
     }
     func snapshot() -> Row {
         switch mode {
@@ -245,15 +258,17 @@ final class BackendRouter: HUDBackend {
         case .tui: core.bindings = [:]; return tui.snapshot().merging(["backend": "tui"], uniquingKeysWith: { _, b in b })
         case .auto:
             if core.installed, let roster = try? core.fetch() {
-                guard (roster["agents"] as? [Row] ?? []).isEmpty, tui.installed else { tui.bindings = [:]; return roster }
+                guard !Self.hasOnlineAgent(roster), tui.installed else { tui.bindings = [:]; return roster }
                 let other = tui.snapshot()
-                guard (other["agents"] as? [Row] ?? []).isEmpty else { core.bindings = [:]; return other.merging(["backend": "tui"], uniquingKeysWith: { _, b in b }) }
+                if Self.hasOnlineAgent(other) || ((roster["agents"] as? [Row] ?? []).isEmpty && !(other["agents"] as? [Row] ?? []).isEmpty) {
+                    core.bindings = [:]; return other.merging(["backend": "tui"], uniquingKeysWith: { _, b in b })
+                }
                 tui.bindings = [:]; return roster
             }
             core.bindings = [:]
             return tui.snapshot().merging(["backend": "tui"], uniquingKeysWith: { _, b in b })
         }
     }
-    func output(_ id: String) throws -> Row { Self.isCore(id) ? try core.output(id) : try tui.output(id) }
-    func prompt(_ id: String, _ message: String) throws -> Row { Self.isCore(id) ? try core.prompt(id, message) : try tui.prompt(id, message) }
+    func output(_ id: String) throws -> Row { let key = Self.migrateSelection(id); return Self.isCore(key) ? try core.output(key) : try tui.output(key) }
+    func prompt(_ id: String, _ message: String) throws -> Row { let key = Self.migrateSelection(id); return Self.isCore(key) ? try core.prompt(key, message) : try tui.prompt(key, message) }
 }

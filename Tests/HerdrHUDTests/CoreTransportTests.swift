@@ -233,7 +233,7 @@ final class CoreTransportTests: XCTestCase {
         XCTAssertFalse(pipe.errOpen)
     }
 
-    // CR 2. Automatic mode: an empty core (hc connect starts one on demand) must not hide an active herdr CLI.
+    // CR 2. Automatic mode: an empty or offline-only core must not hide an active herdr CLI; offline core cards stay when TUI is empty.
     func testAutoAsksTuiWhenCoreIsEmpty() throws {
         var tuiAgents: [Row] = [["pane_id": "w1:p1", "terminal_id": "x", "workspace_id": "w1", "tab_id": "w1:t1", "agent": "codex", "agent_status": "idle", "agent_session": NSNull()]]
         var tuiCalls = 0
@@ -256,7 +256,20 @@ final class CoreTransportTests: XCTestCase {
         let busy = Core(); busy.terminals = [terminal()]
         tuiAgents = [["pane_id": "w1:p1", "terminal_id": "x", "workspace_id": "w1", "agent": "codex", "agent_status": "idle"]]
         XCTAssertEqual(BackendRouter(core: make(busy), tui: tui("/test/herdr"), defaults: defaults).snapshot()["backend"] as? String, "core")
-        XCTAssertEqual(tuiCalls, 0)  // a core with agents wins without asking the CLI
+        XCTAssertEqual(tuiCalls, 0)  // a core with live agents wins without asking the CLI
+        // Disconnected remote Core machine leaves cached online=false cards: live TUI wins, else Core keeps its offline cards.
+        let offlineOnly = Core()
+        let rohan: Row = ["name": "rohan", "id": "m1", "host": "rohan", "target": "rohan", "version": "0.1.22", "state": "connected"]
+        offlineOnly.machines = [rohan]; offlineOnly.terminals = [terminal("rohan/t2")]
+        let coreClient = make(offlineOnly)
+        _ = coreClient.snapshot()
+        offlineOnly.machines = [rohan.merging(["state": "unreachable"], uniquingKeysWith: { _, b in b })]; offlineOnly.terminals = []
+        XCTAssertEqual(BackendRouter(core: coreClient, tui: tui("/test/herdr"), defaults: defaults).snapshot()["backend"] as? String, "tui")
+        tuiAgents = []
+        let kept = BackendRouter(core: coreClient, tui: tui("/test/herdr"), defaults: defaults).snapshot()
+        XCTAssertEqual(kept["backend"] as? String, "core")
+        XCTAssertEqual((kept["agents"] as? [Row])?.count, 1)
+        XCTAssertEqual((kept["agents"] as? [Row])?.first?["online"] as? Bool, false)
     }
 
     // CR 3. The bound program ignores foreground.argv, which follows whatever runs in front of the agent.
@@ -278,11 +291,18 @@ final class CoreTransportTests: XCTestCase {
         XCTAssertEqual(CoreHerdrClient.program(t), "claude"); XCTAssertEqual(CoreHerdrClient.shownProgram(t), "claude")
     }
 
-    // CR 4. Switching backend by hand drops a selection that belongs to the other backend.
+    // CR 4. Switching backend drops the other backend's selection; TUI machine id "core" never collides with Core prefix.
     func testSelectionAfterBackendSwitch() {
         let core = CoreHerdrClient.identity(machine: "local", address: "t7", created: "1", provider: "codex"), tui = encode(["local", "", "default", "w1:p1", "x", NSNull()])
+        let tuiMachineNamedCore = HerdrClient.key(Machine(id: "core", label: "Core Box", target: "corebox", session: "default"), ["pane_id": "w1:p1", "terminal_id": "term1", "agent_session": NSNull()])
+        let legacyCore = encode(["core", "local", "t7", "1", "codex"])
+        XCTAssertTrue(core.hasPrefix("core:")); XCTAssertFalse(BackendRouter.isCore(tuiMachineNamedCore))
+        XCTAssertEqual(BackendRouter.migrateSelection(legacyCore), core)
+        XCTAssertEqual(BackendRouter.migrateSelection(tuiMachineNamedCore), tuiMachineNamedCore)
         XCTAssertTrue(BackendRouter.selectionSurvives(core, after: .core)); XCTAssertFalse(BackendRouter.selectionSurvives(core, after: .tui))
+        XCTAssertTrue(BackendRouter.selectionSurvives(legacyCore, after: .core)); XCTAssertFalse(BackendRouter.selectionSurvives(legacyCore, after: .tui))
         XCTAssertTrue(BackendRouter.selectionSurvives(tui, after: .tui)); XCTAssertFalse(BackendRouter.selectionSurvives(tui, after: .core))
+        XCTAssertTrue(BackendRouter.selectionSurvives(tuiMachineNamedCore, after: .tui)); XCTAssertFalse(BackendRouter.selectionSurvives(tuiMachineNamedCore, after: .core))
         for mode in BackendRouter.Mode.allCases { XCTAssertTrue(BackendRouter.selectionSurvives("shepherdr:p:Mac:~", after: mode)); XCTAssertTrue(BackendRouter.selectionSurvives("", after: mode)) }
         XCTAssertTrue(BackendRouter.selectionSurvives(core, after: .auto)); XCTAssertTrue(BackendRouter.selectionSurvives(tui, after: .auto))
     }

@@ -112,13 +112,20 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         status.menu = menu
     }
     @objc func changeBackend(_ item: NSMenuItem) {
-        guard let mode = item.representedObject as? String, BackendRouter.Mode(rawValue:mode) != nil else { return }
+        guard let mode = item.representedObject as? String, let target = BackendRouter.Mode(rawValue:mode) else { return }
         defaults.set(mode,forKey:"backendMode"); for choice in backends { choice.state = choice.representedObject as? String == mode ? .on : .off }
         // The other backend's ids never match the new roster: start alerts from scratch and drop a selection that
         // can no longer resolve. A poll already running belongs to the old backend; its roster is discarded.
         backendEpoch += 1; emit("resetBaseline",[:])
-        if let id = defaults.string(forKey:"selectedAgent"), !BackendRouter.selectionSurvives(id,after:BackendRouter.Mode(rawValue:mode)!) { defaults.removeObject(forKey:"selectedAgent"); selected = ""; emit("select",["id":""]) }
+        let id = savedSelection()
+        if !id.isEmpty, !BackendRouter.selectionSurvives(id,after:target) { defaults.removeObject(forKey:"selectedAgent"); selected = ""; emit("select",["id":""]) }
         refresh()
+    }
+    func savedSelection() -> String {
+        let raw = defaults.string(forKey:"selectedAgent") ?? ""
+        let migrated = BackendRouter.migrateSelection(raw)
+        if migrated != raw { defaults.set(migrated,forKey:"selectedAgent") }
+        return migrated
     }
     @objc func changeShortcut(_ item: NSMenuItem) { defaults.set(item.tag,forKey:"shortcutMode"); registerHotkeys() }
     func registerHotkeys() {
@@ -208,7 +215,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         guard message.frameInfo.isMainFrame, let data = message.body as? Row, let operation = data["op"] as? String else { return }
         let requestID = data["requestID"] as? String ?? ""
         switch operation {
-        case "ready": ready = true; emit("preferences",["selectedAgent":defaults.string(forKey:"selectedAgent") ?? "","rosterWidth":defaults.double(forKey:"rosterWidth"),"mode":defaults.string(forKey:"viewMode") ?? "chat","rosterMode":rosterMode,"shepherdrSupported":true]); emit("visibility",["open":panelOpen]); if !lastSnapshot.isEmpty { emit("roster",lastSnapshot) }; if !hotkeyWarning.isEmpty { emit("notice",["message":hotkeyWarning]) }
+        case "ready": ready = true; emit("preferences",["selectedAgent":savedSelection(),"rosterWidth":defaults.double(forKey:"rosterWidth"),"mode":defaults.string(forKey:"viewMode") ?? "chat","rosterMode":rosterMode,"shepherdrSupported":true]); emit("visibility",["open":panelOpen]); if !lastSnapshot.isEmpty { emit("roster",lastSnapshot) }; if !hotkeyWarning.isEmpty { emit("notice",["message":hotkeyWarning]) }
         case "close": closePanel()
         case "hide": if visible { toggleVisibility() }
         case "refresh": refresh()
@@ -275,7 +282,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         case "show": if !visible { toggleVisibility() }
         case "preview-alert":
             let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
-            showToast(["id":defaults.string(forKey:"selectedAgent") ?? "","title":"Notification preview","preview":"Notifications follow H and stay clear of the button."])
+            showToast(["id":savedSelection(),"title":"Notification preview","preview":"Notifications follow H and stay clear of the button."])
             DispatchQueue.main.asyncAfter(deadline:.now()+0.25) {
                 guard let toast = self.toast else { return }
                 let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly,kCGNullWindowID) as? [Row] ?? []
